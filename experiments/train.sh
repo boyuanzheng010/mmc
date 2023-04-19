@@ -1,0 +1,228 @@
+#!/bin/bash
+#python run.py train_xlmr_base_ml0_d1_dialogue_farsi 10
+#python run.py train_xlmr_base_ml0_d1_dialogue_chinese 10
+#python run.py train_xlmr_base_ml0_d1_dialogue_english 10
+#python run.py train_xlmr_base_ml0_d1_mix_english 10
+#python run.py train_xlmr_base_ml0_d1_mix_chinese 10
+
+
+
+#python run.py train_xlmr_base_ml0_d1_farsi_gold 10
+#python run.py train_xlmr_base_ml0_d1_chinese_gold 10
+#python run.py train_xlmr_base_ml0_d1_english_gold 10
+
+#python run.py train_xlmr_base_ml0_d1_dialogue_farsi 5
+#python run.py train_xlmr_base_ml0_d1_dialogue_chinese 4
+#python run.py train_xlmr_base_ml0_d1_dialogue_english 10
+#python run.py train_xlmr_base_ml0_d1_dialogue_chinese_english_farsi 7
+#python run.py train_xlmr_base_ml0_d1_dialogue_chinese_english 10
+#python run.py train_xlmr_base_ml0_d1_ontonotes_en_dialogue_en_zh_chinese_english 7
+
+#python run.py train_xlmr_base_ml0_d1_tbbt_english 2
+#python run.py train_xlmr_base_ml0_d1_friends_english 3
+
+
+#python run.py train_xlmr_base_ml0_d1_ontonotes_chinese 3
+#python run.py train_xlmr_base_ml0_d1_ontonotes_english 2
+#python run.py train_xlmr_base_ml0_d1_mix_english 10
+#python run.py train_xlmr_base_ml0_d1_mix_chinese 10
+
+
+#python run.py train_xlmr_base_ml0_d1_friends_english 10
+#python run.py train_spanbert_large_ml0_d1_dialogue_english 10
+#python run.py train_spanbert_large_ml0_d1_dialogue_name_replaced_english 7
+#python run.py train_spanbert_large_ml0_d1_ontonotes_english 10
+#python run.py train_spanbert_large_ml0_d1_friends_english 10
+#python run.py train_spanbert_large_ml0_d1_mix_chinese 10
+#python run.py train_spanbert_large_ml0_d1_mix_english 10
+
+
+
+# Train MC-TBBT and MC-Friends
+#python run.py train_spanbert_large_ml0_d1_friends_english 10
+#python run.py train_spanbert_large_ml0_d1_tbbt_english 10
+#python run.py train_xlmr_base_ml0_d1_friends_chinese 10
+#python run.py train_xlmr_base_ml0_d1_tbbt_chinese 10
+
+
+#python run.py train_xlmr_base_ml0_d1_fixed_dialogue_chinese 10
+#python run.py train_xlmr_base_ml0_d1_fixed_dialogue_farsi 10
+
+
+# Re-Run
+#python run.py train_spanbert_large_ml0_d1_ci_english 10
+#python run.py train_xlmr_base_ml0_d1_dialogue_english 10
+#python run.py train_spanbert_large_ml0_d1_mix_ontonotes_dialogue_english 10
+#python run.py train_spanbert_large_ml0_d1_ontonotes_english 5
+
+
+# Re-Run All SpanBERT
+#python run.py train_spanbert_large_ml0_d1_ontonotes_english 10
+#python run.py train_spanbert_large_ml0_d1_ci_english 10
+#python run.py train_spanbert_large_ml0_d1_dialogue_english 10
+#python run.py train_spanbert_large_ml0_d1_dialogue_name_replaced_english 10
+#python run.py train_spanbert_large_ml0_d1_mix_ontonotes_dialogue_english 10
+#python run.py train_spanbert_large_ml0_d1_friends_english 10
+#python run.py train_spanbert_large_ml0_d1_tbbt_english 10
+#python run.py train_spanbert_large_ml0_d1_friends_name_replaced_english 10
+
+
+# Re-Run All XLMR
+#python run.py train_xlmr_base_ml0_d1_dialogue_farsi 10
+#python run.py train_xlmr_base_ml0_d1_dialogue_chinese 10
+#python run.py train_xlmr_base_ml0_d1_dialogue_english 10
+#python run.py train_xlmr_base_ml0_d1_dialogue_chinese_english_farsi 10
+#python run.py train_xlmr_base_ml0_d1_ontonotes_english 10
+#python run.py train_xlmr_base_ml0_d1_ontonotes_chinese 10
+#python run.py train_xlmr_base_ml0_d1_mix_english 10
+#python run.py train_xlmr_base_ml0_d1_mix_chinese 10
+
+
+
+# Random Seeds Experiments
+#python run.py train_spanbert_large_ml0_d1_ontonotes_english 10 10
+#python run.py train_spanbert_large_ml0_d1_ontonotes_english 10 100
+#python run.py train_spanbert_large_ml0_d1_ontonotes_english 10 1000
+#python run.py train_spanbert_large_ml0_d1_ci_english 10 10
+#python run.py train_spanbert_large_ml0_d1_ci_english 10 100
+#python run.py train_spanbert_large_ml0_d1_ci_english 10 1000
+#python run.py train_spanbert_large_ml0_d1_dialogue_english 10 10
+#python run.py train_spanbert_large_ml0_d1_dialogue_english 10 100
+#python run.py train_spanbert_large_ml0_d1_dialogue_english 10 1000
+#python run.py train_spanbert_large_ml0_d1_dialogue_name_replaced_english 10 10
+#python run.py train_spanbert_large_ml0_d1_dialogue_name_replaced_english 10 100
+#python run.py train_spanbert_large_ml0_d1_dialogue_name_replaced_english 10 1000
+#python run.py train_spanbert_large_ml0_d1_mix_ontonotes_dialogue_english 10 10
+#python run.py train_spanbert_large_ml0_d1_mix_ontonotes_dialogue_english 10 100
+#python run.py train_spanbert_large_ml0_d1_mix_ontonotes_dialogue_english 10 1000
+#python run.py train_spanbert_large_ml0_d1_friends_english 10 10
+#python run.py train_spanbert_large_ml0_d1_friends_english 10 100
+#python run.py train_spanbert_large_ml0_d1_friends_english 10 1000
+#python run.py train_spanbert_large_ml0_d1_tbbt_english 10 10
+#python run.py train_spanbert_large_ml0_d1_tbbt_english 10 100
+#python run.py train_spanbert_large_ml0_d1_tbbt_english 10 1000
+#python run.py train_spanbert_large_ml0_d1_friends_name_replaced_english 10 10
+#python run.py train_spanbert_large_ml0_d1_friends_name_replaced_english 10 100
+#python run.py train_spanbert_large_ml0_d1_friends_name_replaced_english 10 1000
+
+#python run.py train_xlmr_base_ml0_d1_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_dialogue_farsi 10 100
+#python run.py train_xlmr_base_ml0_d1_dialogue_farsi 10 1000
+#python run.py train_xlmr_base_ml0_d1_dialogue_chinese_english_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_dialogue_chinese_english_farsi 10 100
+#python run.py train_xlmr_base_ml0_d1_dialogue_chinese_english_farsi 10 1000
+
+#python run.py train_xlmr_base_ml0_d1_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_dialogue_chinese 10 100
+#python run.py train_xlmr_base_ml0_d1_dialogue_chinese 10 1000
+#python run.py train_xlmr_base_ml0_d1_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_dialogue_english 10 100
+#python run.py train_xlmr_base_ml0_d1_dialogue_english 10 1000
+#python run.py train_xlmr_base_ml0_d1_ontonotes_english 10 10
+#python run.py train_xlmr_base_ml0_d1_ontonotes_english 10 100
+#python run.py train_xlmr_base_ml0_d1_ontonotes_english 10 1000
+#python run.py train_xlmr_base_ml0_d1_ontonotes_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_ontonotes_chinese 10 100
+#python run.py train_xlmr_base_ml0_d1_ontonotes_chinese 10 1000
+#python run.py train_xlmr_base_ml0_d1_mix_english 10 10
+#python run.py train_xlmr_base_ml0_d1_mix_english 10 100
+#python run.py train_xlmr_base_ml0_d1_mix_english 10 1000
+#python run.py train_xlmr_base_ml0_d1_mix_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_mix_chinese 10 100
+#python run.py train_xlmr_base_ml0_d1_mix_chinese 10 1000
+
+
+#python run.py train_spanbert_large_ml0_d1_ontonotes_drop_english 10 10
+#python run.py train_spanbert_large_ml0_d1_dialogue_drop_english 10 10
+#python run.py train_partial_spanbert_large_ml0_d1_dialogue_english 10 10
+
+#python run.py train_spanbert_large_ratio_5_large_ml0_d1_dialogue_english 10 10
+#python run.py train_spanbert_large_ratio_6_large_ml0_d1_dialogue_english 10 10
+#python run.py train_spanbert_large_ratio_7_large_ml0_d1_dialogue_english 10 10
+
+#python run.py train_spanbert_hinge_large_ml0_d1_dialogue_english 10 10
+
+#python run.py train_spanbert_large_ml0_d1_golden_mention_loss_dialogue_english 10 10
+#python run.py train_spanbert_large_ml0_d1_all_mention_loss_dialogue_english 10 10
+
+
+#python run.py train_spanbert_large_ml0_d1_weighted_all_0_9_5_mention_loss_dialogue_english 10 10
+#python run.py train_spanbert_large_ml0_d1_weighted_all_0_9_mention_loss_dialogue_english 10 10
+#python run.py train_spanbert_large_ml0_d1_weighted_all_0_8_5_mention_loss_dialogue_english 10 10
+#python run.py train_spanbert_large_ml0_d1_weighted_all_0_7_mention_loss_dialogue_english 10 10
+#python run.py train_spanbert_large_ml0_d1_weighted_all_0_6_mention_loss_dialogue_english 10 10
+#python run.py train_spanbert_large_ml0_d1_weighted_all_0_5_mention_loss_dialogue_english 10 10
+#python run.py train_spanbert_large_ml0_d1_weighted_all_0_3_mention_loss_dialogue_english 10 3407
+#python run.py train_spanbert_large_ml0_d1_weighted_all_0_2_mention_loss_dialogue_english 10 10
+#python run.py train_spanbert_large_ml0_d1_weighted_all_0_1_mention_loss_dialogue_english 10 10
+
+#python run.py train_spanbert_large_ml0_d1_weighted_all_0_4_mention_loss_dialogue_english 4 3407
+#python run.py train_spanbert_large_ml0_d1_weighted_all_0_8_mention_loss_dialogue_english 5 3407
+python run.py train_spanbert_large_ml0_d1_weighted_all_0_3_mention_loss_dialogue_english 6 3407
+
+
+#python run.py train_xlmr_base_ml0_d1_golden_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_all_mention_loss_dialogue_chinese 10 10
+
+
+#python run.py train_xlmr_base_ml0_d1_golden_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_all_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_8_5_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_7_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_5_5_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_9_5_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_9_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_8_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_7_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_6_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_5_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_4_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_3_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_2_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_1_mention_loss_dialogue_farsi 10 10
+
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_8_5_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_7_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_5_5_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_9_5_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_8_5_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_9_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_8_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_7_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_6_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_5_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_4_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_3_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_2_mention_loss_dialogue_chinese 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_1_mention_loss_dialogue_chinese 10 10
+
+#python run.py train_spanbert_large_ml0_d1_proj_prob_aware_5_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_proj_prob_aware_55_mention_loss_dialogue_farsi 10 10
+#python run.py train_xlmr_base_ml0_d1_proj_prob_aware_7_mention_loss_dialogue_chinese 10 10
+
+
+
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_9_5_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_9_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_8_5_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_8_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_7_5_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_7_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_6_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_5_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_4_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_3_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_2_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_1_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_mention_loss_dialogue_english 10 10
+#python run.py train_xlmr_base_ml0_d1_golden_mention_loss_dialogue_english 10 0
+
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_5_5_mention_loss_dialogue_farsi_reduce 5 10
+#python run.py train_xlmr_base_ml0_d1_golden_mention_loss_dialogue_farsi_reduce 6 10
+#python run.py train_xlmr_base_ml0_d1_all_mention_loss_dialogue_farsi_reduce 7 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_7_mention_loss_dialogue_farsi_reduce 4 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_8_mention_loss_dialogue_farsi_reduce 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_6_mention_loss_dialogue_farsi_reduce 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_4_mention_loss_dialogue_farsi_reduce 10 10
+#python run.py train_xlmr_base_ml0_d1_weighted_all_0_3_mention_loss_dialogue_farsi_reduce 10 10
+
