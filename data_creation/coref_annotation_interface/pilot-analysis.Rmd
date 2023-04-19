@@ -1,0 +1,158 @@
+---
+title: "Pilot Analysis"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+datetime_format <- "%.%.%. %b %e %H:%M:%S %.%.%. %Y"
+mturk_cols <- cols(
+  CreationTime=col_datetime(format=datetime_format),
+  AcceptTime=col_datetime(format=datetime_format),
+  SubmitTime=col_datetime(format=datetime_format),
+  ApprovalTime=col_datetime(format=datetime_format),
+  AutoApprovalTime=col_datetime(format=datetime_format),
+  RejectionTime=col_datetime(format=datetime_format)
+)
+data <- read_csv('pilot-results.csv', col_types=mturk_cols)
+gold_data <- read_csv('pilot-results-gold.csv', col_types=mturk_cols)
+data %>% select(Answer.answer_spans, WorkerId, HITId) %>% arrange(str_length(Answer.answer_spans))
+```
+
+## Accuracy Analysis
+
+```{r fig.width=7,fig.height=7}
+crowd_data_split <- read_csv('pilot-results-split.csv', col_types=mturk_cols)
+gold_data_split <- read_csv('pilot-results-gold-split.csv', col_types=mturk_cols)
+data_split <- crowd_data_split %>%
+  inner_join(gold_data_split, by=c('Input.json_data', 'Answer.query_span'), suffix=c('.crowd', '.gold')) %>%
+  mutate(Answer.correct=(Answer.answer_span.crowd == Answer.answer_span.gold))
+data_split
+data_split %>%
+  ggplot() +
+  geom_point(aes(y=WorkerId.crowd, x=interaction(Answer.query_span, HITId.crowd), size=Answer.correct)) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=-30, vjust=1, hjust=0))
+```
+
+```{r}
+data_split %>%
+  group_by(WorkerId.crowd) %>%
+  summarise(count=n(), accuracy=mean(Answer.correct)) %>%
+  ggplot() +
+  geom_point(aes(x=count, y=accuracy)) +
+  theme_bw()
+```
+
+```{r}
+data_split_summary <- data_split %>%
+  group_by(interaction(Answer.query_span, HITId.crowd)) %>%
+  summarise(accuracy=mean(Answer.correct))
+data_split_summary$accuracy %>% quantile
+data_split_summary %>%
+  ggplot() +
+  geom_dotplot(aes(accuracy)) +
+  theme_bw()
+```
+
+## Time Analysis
+
+```{r}
+data %>%
+  ggplot() +
+  geom_histogram(aes(WorkTimeInSeconds)) +
+  scale_x_log10() +
+  theme_bw()
+data$WorkTimeInSeconds %>% quantile
+ggsave('pilot-work-time.png', width=4, height=4)
+```
+
+```{r}
+data %>%
+  group_by(WorkerId) %>%
+  mutate(worker_num_hits=n()) %>%
+  ungroup %>%
+  ggplot() +
+  geom_boxplot(aes(x=interaction(WorkerId, worker_num_hits), y=WorkTimeInSeconds)) +
+  scale_y_log10() +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=-90, vjust=0, hjust=0))
+ggsave('pilot-workers.png', width=8, height=4)
+```
+
+```{r fig.width=16,fig.height=10}
+time_data <- data %>%
+  gather(key='time_type', value='time_value',
+         CreationTime, AcceptTime, SubmitTime,
+         ApprovalTime, AutoApprovalTime, RejectionTime) %>%
+  filter(time_type == 'AcceptTime' | time_type == 'SubmitTime')
+time_data %>%
+  group_by(WorkerId) %>%
+  filter(n() > 2*2) %>%
+  ungroup %>%
+  ggplot(aes(x=time_value, y=interaction(HITId, WorkerId), group=interaction(HITId, WorkerId), color=WorkerId)) +
+  geom_point() +
+  geom_line() +
+  xlab('Time span of each HIT') +
+  theme_bw()
+ggsave('pilot-time-three_or_more_hits.png', width=16, height=10)
+```
+```{r fig.width=16,fig.height=5}
+time_data %>%
+  filter(WorkTimeInSeconds > 600) %>%
+  ggplot(aes(x=time_value, y=interaction(HITId, WorkerId), group=interaction(HITId, WorkerId), color=WorkerId)) +
+  geom_point() +
+  geom_line() +
+  xlab('Time span of each HIT') +
+  theme_bw()
+ggsave('pilot-time-ten_or_more_minutes.png', width=16, height=5)
+```
+
+```{r}
+submit_time_data <- data %>%
+  group_by(WorkerId) %>%
+  filter(n() > 1) %>%
+  ungroup %>%
+  arrange(SubmitTime) %>%
+  nest(-WorkerId) %>%
+  mutate(data=data %>% map(~ tibble(HITId=.x$HITId[1:(nrow(.x)-1)], submit_time_diff=as.numeric(diff(.x$SubmitTime), units='secs')))) %>%
+  unnest
+submit_time_data$submit_time_diff %>% quantile
+submit_time_data %>%
+  ggplot() +
+  geom_histogram(aes(submit_time_diff)) +
+  scale_x_log10() +
+  theme_bw()
+ggsave('pilot-submit_time_diff.png', width=4, height=4)
+```
+
+```{r}
+submit_time_data %>%
+  ggplot() +
+  geom_boxplot(aes(y=submit_time_diff, x=WorkerId)) +
+  scale_y_log10() +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=-25, vjust=1, hjust=0))
+```
+
+```{r}
+submit_time_data %>%
+  ggplot() +
+  geom_boxplot(aes(y=submit_time_diff, x=HITId)) +
+  scale_y_log10() +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=-20, vjust=1, hjust=0))
+```
+
+```{r}
+submit_time_data %>%
+  mutate(log_submit_time_diff=log10(submit_time_diff)) %>%
+  ggplot() +
+  geom_point(aes(x=HITId, y=WorkerId, size=submit_time_diff)) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=-20, vjust=1, hjust=0))
+```
+

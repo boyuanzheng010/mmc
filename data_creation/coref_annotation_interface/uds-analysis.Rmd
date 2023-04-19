@@ -1,0 +1,576 @@
+---
+title: "UDS Analysis"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(jsonlite)
+library(irr)
+library(assertthat)
+```
+
+```{r}
+datetime_format <- "%.%.%. %b %e %H:%M:%S %.%.%. %Y"
+mturk_cols <- cols(
+  CreationTime=col_datetime(format=datetime_format),
+  AcceptTime=col_datetime(format=datetime_format),
+  SubmitTime=col_datetime(format=datetime_format)
+)
+annotators <- tribble(
+  ~group_name, ~user_name,
+  'GusRodriguez', 'grodri24',
+  'JamiesonAlexander', 'jalexa46',
+  'JoselynCarretero', 'jcarret2',
+  'JTWilson', 'jwils191',
+  'NataliaMauroni', 'nmauron1'
+)
+split_inputs <- c('train', 'dev', 'test') %>%
+  map_dfr(~ tibble(Input.json_data=read_lines(str_c('uds-', .x, '-hits.jsonl')), split=.x))
+data <- annotators$group_name %>%
+  map_dfr(~ read_csv(str_c('uds-combined-hits-assignments-1-shuf/', .x, '-results.csv'), col_types=mturk_cols)) %>%
+  mutate(Answer.answer_spans=Answer.answer_spans %>% map(~ fromJSON(.x, flatten=T))) %>%
+  left_join(split_inputs, by='Input.json_data') %>%
+  unnest(Answer.answer_spans) %>%
+  mutate(query_id=group_indices(., Input.json_data, querySpan.sentenceIndex, querySpan.startToken, querySpan.endToken),
+         answer_id=group_indices(., notPresent, sentenceIndex, startToken, endToken),
+         split=factor(split, levels=c('train', 'dev', 'test')))
+data %>% count(status)
+```
+
+```{r}
+hit_data <- data %>%
+  group_by(Input.json_data, WorkerId, WorkTimeInSeconds, split) %>%
+  summarise(num_queries=n()) %>%
+  ungroup %>%
+  mutate(num_queries=factor(num_queries))
+hit_data %>%
+  count(split, Input.json_data, name='redundancy') %>%
+  count(split, redundancy, name='num_inputs')
+```
+
+```{r}
+train_data <- data %>% filter(split=='train')
+train_data %>%
+  select(Input.json_data, query_id) %>%
+  unique %>%
+  count(Input.json_data, name='num_queries') %>%
+  count(num_queries) %>%
+  mutate(frac=n/sum(n))
+train_data %>%
+  select(Input.json_data, query_id) %>%
+  unique %>%
+  count(Input.json_data, name='num_queries') %>%
+  ggplot() +
+  geom_bar(aes(num_queries)) +
+  theme_bw() +
+  xlab('Number of queries in a sentence (train only)')
+ggsave('uds-train-num-queries.png', width=4, height=4)
+```
+
+```{r}
+hit_data %>%
+  count(split, WorkerId)
+```
+
+
+## Agreement Analysis
+
+```{r}
+not_present_answer_id <- (data %>% filter(notPresent))$answer_id[1]
+irr_data <- data %>%
+  group_by(split, Input.json_data, query_id) %>%
+  summarise(answer_1=answer_id[1],
+            answer_2=answer_id[2],
+            answer_3=answer_id[3]) %>%
+  ungroup %>%
+  mutate(agree=1 +
+           (answer_1 == answer_2) +
+           ifelse(is.na(answer_3), 0, (answer_2 == answer_3)),
+         not_present=(answer_1 == not_present_answer_id) +
+           (answer_2 == not_present_answer_id) +
+           ifelse(is.na(answer_3), 0, (answer_3 == not_present_answer_id)))
+irr_data %>%
+  count(split, agree) %>%
+  group_by(split) %>%
+  mutate(frac=n/sum(n)) %>%
+  ungroup
+irr_data %>%
+  ggplot() +
+  geom_bar(aes(agree)) +
+  facet_grid(split ~ ., scales='free_y') +
+  theme_bw() +
+  xlab('Number of annotators who agree')
+ggsave('uds-agree.png', width=4, height=4)
+```
+
+```{r}
+# this is a hack.
+# probably needlessly complicated proof that it works, for redundancy
+# of 3x or less:
+# we group by sentence index and, within each group, order by
+# start token (increasing) and then end token (decreasing).  we then
+# compute the diff (difference between successive elements) of the
+# end token vector (within a group).  where the diff is non-positive,
+# that means the end token indices are non-increasing, and
+# we know the start index is always non-decreasing, so the
+# corresponding spans are nested within one another.  so non-positive
+# entries of the diff necessarily correspond to nested answer spans.
+# to show that one plus the number of non-positive entries is the maximum number
+# of annotators in agreement (sufficiency), first note that because we
+# have assumed a redundancy of 3x or less, then the number of spans
+# that are nested in other spans is the same as the number of spans
+# that are nested all together in one chain.  (by contrast, with 4x
+# redundancy, we may have two pairs of respectively nested
+# annotations.)  so now all we have to do is count the number of spans
+# that are nested in other spans, and add one (to account for the
+# first/largest span in the chain).  if one span
+# is contained within another, and the two spans are not equal, then
+# that span will appear later in the ordering.  the number of
+# annotators in agreement is equal to the maximum number of
+# successively nested spans, which we know will appear in order from
+# largest to smallest in the ordering.  additionally, the only
+# successive spans in the ordering that do not contain one another
+# are those at the start token boundaries, that is, pairs for which
+# the second span has a later start token than the first span.  so
+# the sequence of maximally nested spans will be interspersed with
+# other spans only at the start token boundaries.  but if the
+# sequence is interrupted at a token boundary, say the sequence
+# is {t_0, t_1, t_2} before it is interrupted, then the token
+# immediately preceding t_3 in the ordering, call it t' must not
+# be in the sequence and must contain t_3.  by way of
+# contradiction, if t' did not contain t_3, then its end token would be
+# earlier than that of t_3, because the start token indices are
+# non-decreasing.  but if that's the case, then t' has a start token
+# no earlier than that of t_2 and an end token no later than that of
+# t_2 (because it is no later than that of t_3, which is contained
+# in t_2), so t' would be in the sequence, a contradiction.
+# additionally, if any annotators select "not present," then their
+# indices will all be fixed to -1, and this operation trivially
+# counts the number of those in agreement (without conflating them
+# with non-negative indices).  additionally, spans are not allowed to
+# reach across sentences, so we handle answers in different sentences
+# appropriately as well.
+# therefore this operation counts the number of annotators in
+# agreement.
+contain_irr_data <- data %>%
+  group_by(split, query_id, sentenceIndex) %>%
+  arrange(startToken, -endToken) %>%
+  summarise(contain_agree=1 + sum(diff(endToken) <= 0)) %>%
+  ungroup %>%
+  group_by(split, query_id) %>%
+  summarise(contain_agree=max(contain_agree)) %>%
+  ungroup
+irr_data %>%
+  inner_join(contain_irr_data, by='query_id') %>%
+  rename(exact=agree, contains=contain_agree) %>%
+  gather('agree_mode', 'agree', exact, contains) %>%
+  mutate(agree_mode=factor(agree_mode, levels=c('exact', 'contains'))) %>%
+  filter(split.x == 'train') %>%
+  count(agree_mode, agree) %>%
+  group_by(agree_mode) %>%
+  mutate(frac=n/sum(n)) %>%
+  ungroup
+```
+
+```{r}
+cluster_answers <- function(data) {
+  resolvability_data <- data %>%
+    mutate(data=Input.json_data %>% map(function(json_data) {
+      j <- fromJSON(json_data)
+      tibble(documentId=j$documentId,
+             startSentenceIndex=j$startSentenceIndex,
+             endSentenceIndex=j$endSentenceIndex)
+    })) %>%
+    unnest %>%
+    mutate(querySpan.sentenceIndex=startSentenceIndex + querySpan.sentenceIndex,
+           sentenceIndex=startSentenceIndex + sentenceIndex) %>%
+    select(documentId,
+           querySpan.sentenceIndex, querySpan.startToken, querySpan.endToken,
+           sentenceIndex, startToken, endToken, notPresent)
+  doc_pairs <- resolvability_data %>%
+    nest(-documentId) %>%
+    mutate(data=data %>% map(function(d) {
+      nested_d <- d %>%
+        nest(sentenceIndex, startToken, endToken, notPresent) %>%
+        arrange(querySpan.sentenceIndex, querySpan.startToken, querySpan.endToken)
+      
+      clusters <- tibble(sentenceIndex=integer(),
+                         startToken=integer(),
+                         endToken=integer(),
+                         cluster=integer(),
+                         resolved=logical())
+      for (i in 1:nrow(nested_d)) {
+        answer_clusters <- nested_d$data[[i]] %>%
+          count(sentenceIndex, startToken, endToken, notPresent, name='num_reps') %>%
+          left_join(clusters, by=c('sentenceIndex', 'startToken', 'endToken'))
+        majority_answer <- answer_clusters %>% filter(num_reps > sum(num_reps) / 2)
+        assert_that(nrow(majority_answer) %in% c(0, 1))
+        
+        cluster <- if (nrow(majority_answer) > 0) {
+          # (by previous assertion, nrow must be 1)
+          # we have majority agreement
+          if (! majority_answer$notPresent) {
+            if (! is.na(majority_answer$cluster)) {
+              # majority answer is already assigned to a cluster:
+              # assign the query to that cluster
+              majority_answer$cluster
+              
+            } else {
+              # majority answer is NOT already assigned to a cluster:
+              # assign the query AND answer to a new cluster
+              # (we can safely say the answer has not been resolved because
+              # we are iterating in order of the query span position, so
+              # if the answer appeared as a query, we would have already
+              # processed it)
+              cl <- setdiff(1:(nrow(clusters)+1), clusters$cluster) %>% sort %>% first
+              clusters <- rbind(clusters, tibble(
+                sentenceIndex=majority_answer$sentenceIndex,
+                startToken=majority_answer$startToken,
+                endToken=majority_answer$endToken,
+                cluster=cl,
+                resolved=F))
+              cl
+            }
+            
+          } else {
+            # majority answer is "not present":
+            # do not assign query to a cluster
+            NA
+          }
+          
+        } else {
+          # we do NOT have majority agreement
+          if (answer_clusters$cluster %>% unique %>% length == 1) {
+            # all answers are already assigned to the same cluster:
+            # assign the query to that cluster
+            answer_clusters$cluster[1]
+            
+          } else {
+            # answers are not all assigned, or are assigned to different clusters:
+            # do not assign query to a cluster
+            NA
+          }
+        }
+        
+        if (! is.na(cluster)) {
+          clusters <- rbind(clusters, tibble(
+              sentenceIndex=nested_d$querySpan.sentenceIndex[i],
+              startToken=nested_d$querySpan.startToken[i],
+              endToken=nested_d$querySpan.endToken[i],
+              cluster=cluster,
+              resolved=T))
+        }
+      }
+      assert_that(are_equal(clusters %>% distinct %>% nrow, clusters %>% nrow))
+      
+      answer_not_present <- nested_d %>%
+        mutate(data=data %>% map(~ .x %>%
+                                   summarise(notPresent=sum(notPresent) > n() / 2) %>%
+                                   filter(notPresent))) %>%
+        unnest %>%
+        rename(sentenceIndex=querySpan.sentenceIndex,
+               startToken=querySpan.startToken,
+               endToken=querySpan.endToken)
+      
+      list(clusters=clusters, answer_not_present=answer_not_present)
+    }))
+  list(clusters=doc_pairs %>%
+         mutate(data=data %>% map('clusters')) %>%
+         unnest,
+       answer_not_present=doc_pairs %>%
+         mutate(data=data %>% map('answer_not_present')) %>%
+         unnest)
+}
+train_cluster_data <- train_data %>% cluster_answers
+train_clusters <- train_cluster_data$clusters
+train_answer_not_present <- train_cluster_data$answer_not_present
+train_clusters %>%
+  group_by(documentId) %>%
+  summarise(num_clusters=cluster %>% unique %>% length) %>%
+  count(num_clusters)
+```
+
+```{r}
+train_agreement_data <- train_data %>%
+  mutate(data=Input.json_data %>% map(function(json_data) {
+    j <- fromJSON(json_data)
+    tibble(documentId=j$documentId,
+           startSentenceIndex=j$startSentenceIndex)
+  })) %>%
+  unnest %>%
+  mutate(querySpan.absoluteSentenceIndex=querySpan.sentenceIndex + startSentenceIndex,
+         absoluteSentenceIndex=sentenceIndex + startSentenceIndex) %>%
+  select(-startSentenceIndex) %>%
+  left_join(train_clusters,
+            by=c('documentId',
+                 'querySpan.absoluteSentenceIndex'='sentenceIndex',
+                 'querySpan.startToken'='startToken',
+                 'querySpan.endToken'='endToken')) %>%
+  left_join(train_answer_not_present,
+            by=c('documentId',
+                 'querySpan.absoluteSentenceIndex'='sentenceIndex',
+                 'querySpan.startToken'='startToken',
+                 'querySpan.endToken'='endToken'),
+            suffix=c('', '.resolved')) %>%
+  mutate(resolved=ifelse(is.na(resolved), F, resolved),
+         notPresent.resolved=ifelse(is.na(notPresent.resolved), F, notPresent.resolved)) %>%
+  rename(query.cluster=cluster,
+         answer.resolvedNotPresent=notPresent.resolved,
+         answer.resolvedPresent=resolved)
+assert_that(are_equal(nrow(train_data), nrow(train_agreement_data)))
+assert_that(are_equal(train_agreement_data %>%
+                        filter(answer.resolvedNotPresent, answer.resolvedPresent) %>%
+                        nrow,
+                      0))
+train_agreement_data %>%
+  count(answer.resolvedPresent, answer.resolvedNotPresent)
+```
+
+```{r}
+train_agreement_hits <- train_agreement_data %>%
+  left_join(annotators, by=c('Turkle.Username'='user_name')) %>%
+  rename(annotator=group_name) %>%
+  select(Input.json_data,
+         querySpan.sentenceIndex, querySpan.startToken, querySpan.endToken,
+         answer.resolvedPresent, answer.resolvedNotPresent,
+         annotator, sentenceIndex, startToken, endToken, notPresent) %>%
+  nest(annotator, sentenceIndex, startToken, endToken, notPresent)
+```
+
+```{r}
+train_agreement_hits %>%
+  filter(! answer.resolvedPresent, ! answer.resolvedNotPresent) %>%
+  select(-answer.resolvedPresent, -answer.resolvedNotPresent) %>%
+  pmap_dfr(function(Input.json_data,
+                    querySpan.sentenceIndex, querySpan.startToken, querySpan.endToken,
+                    data) {
+    tibble(
+      input_json=Input.json_data,
+      query_answer_json=toJSON(list(
+        querySpan=list(sentenceIndex=unbox(querySpan.sentenceIndex),
+                       startToken=unbox(querySpan.startToken),
+                       endToken=unbox(querySpan.endToken)),
+        answerSpans=data
+      ))
+    )
+  }) %>%
+  write_csv('uds-train-disagreements-1.csv')
+```
+
+```{r}
+data %>%
+  select(WorkerId, split, query_id, answer_id) %>%
+  spread('WorkerId', 'answer_id', sep='.')
+```
+
+```{r}
+irr_data %>%
+  filter(split == 'train', not_present > 0) %>%
+  mutate(not_present=factor(not_present)) %>%
+  ggplot() +
+  geom_bar(aes(not_present)) +
+  theme_bw() +
+  xlab('Number of annotators who answer "not present"\nwhen at least one annotator does (train only)')
+ggsave('uds-train-not-present.png', width=4, height=4)
+```
+
+```{r}
+# this is a hack
+contain_irr_data <- data %>%
+  group_by(split, query_id, sentenceIndex) %>%
+  arrange(startToken, -endToken) %>%
+  summarise(agree=1 + sum(diff(endToken) <= 0)) %>%
+  ungroup %>%
+  group_by(split, query_id) %>%
+  summarise(agree=max(agree)) %>%
+  ungroup %>%
+  mutate(split=factor(split, levels=c('train', 'dev', 'test')))
+contain_irr_data %>%
+  ggplot() +
+  geom_bar(aes(agree)) +
+  facet_grid(split ~ ., scales='free_y') +
+  theme_bw() +
+  xlab('Number of annotators who agree\nwhen counting containment as agreement')
+ggsave('uds-contain-agree.png', width=4, height=4)
+```
+
+```{r}
+dev_data_fake_train <- data %>%
+  filter(split == 'dev') %>%
+  sample_n(nrow(.)) %>% # shuffle
+  group_by(query_id) %>%
+  filter(row_number() <= 2) %>%
+  ungroup
+# this is a hack
+contain_irr_dev_data_fake_train <- dev_data_fake_train %>%
+  group_by(query_id, sentenceIndex) %>%
+  arrange(startToken, -endToken) %>%
+  summarise(agree=1 + sum(diff(endToken) <= 0)) %>%
+  ungroup %>%
+  group_by(query_id) %>%
+  summarise(agree=max(agree)) %>%
+  ungroup
+contain_irr_dev_data_fake_train %>%
+  count(agree, name='n_12') %>%
+  right_join(contain_irr_data %>% filter(split == 'dev') %>% count(agree)) %>%
+  mutate(frac_12=n_12/sum(na.omit(n_12)),
+         frac=n/sum(n))
+```
+
+## Time Analysis
+
+```{r}
+hit_data$WorkTimeInSeconds %>% quantile
+```
+
+```{r}
+hit_data %>%
+  ggplot() +
+  geom_boxplot(aes(y=WorkTimeInSeconds, x=num_queries, group=num_queries)) +
+  scale_y_log10() +
+  xlab('Number of queries in a sentence') +
+  theme_bw()
+ggsave('uds-queries-work-time.png', width=4, height=4)
+```
+
+```{r}
+hit_data %>%
+  filter(WorkTimeInSeconds < 300) %>%
+  ggplot() +
+  geom_jitter(aes(y=WorkTimeInSeconds, x=num_queries), color='red', alpha=0.1) +
+  #scale_y_log10() +
+  xlab('Number of queries in a sentence') +
+  ylab('WorkTimeInSeconds (clipped)') +
+  theme_bw()
+ggsave('uds-queries-work-time-clipped.png', width=4, height=4)
+```
+
+```{r}
+hit_data %>%
+  mutate(num_queries=factor(num_queries)) %>%
+  ggplot(aes(WorkTimeInSeconds, group=num_queries, color=num_queries)) +
+  stat_ecdf() +
+  coord_cartesian(xlim=c(1, 300)) +
+  #scale_x_log10() +
+  xlab('WorkTimeInSeconds (clipped)') +
+  #facet_grid(num_queries ~ .) +
+  theme_bw()
+ggsave('uds-queries-work-time-ecdf-clipped.png', width=8, height=6)
+```
+
+```{r}
+hit_data %>%
+  group_by(Input.json_data) %>%
+  summarise(num_queries=first(num_queries)) %>%
+  ggplot() +
+  geom_bar(aes(num_queries)) +
+  scale_y_log10() +
+  xlab('Number of queries in a sentence') +
+  theme_bw()
+ggsave('uds-queries-num-hits.png', width=4, height=3)
+```
+
+```{r}
+hit_data %>%
+  ggplot() +
+  geom_histogram(aes(WorkTimeInSeconds)) +
+  scale_x_log10() +
+  theme_bw()
+ggsave('uds-work-time.png', width=4, height=4)
+```
+
+```{r}
+hit_data %>%
+  mutate(WorkerId=factor(WorkerId)) %>%
+  ggplot() +
+  geom_boxplot(aes(x=WorkerId, group=WorkerId, y=WorkTimeInSeconds)) +
+  scale_y_log10() +
+  theme_bw()
+ggsave('uds-workers-work-time.png', width=4, height=4)
+```
+
+```{r}
+hit_data %>%
+  group_by(Input.json_data) %>%
+  filter(max(WorkTimeInSeconds) < 300) %>%
+  ungroup %>%
+  inner_join(irr_data) %>%
+  group_by(split, agree) %>%
+  summarise(mean=mean(WorkTimeInSeconds),
+            median=median(WorkTimeInSeconds)) %>%
+  gather('work_time_stat_name', 'work_time_stat_value', mean, median) %>%
+  ggplot() +
+  geom_bar(aes(x=agree, y=work_time_stat_value), stat='identity') +
+  xlab('Number of annotators who agree\nwhen all take less than 5 min') +
+  #ylab('Aggregate work time (seconds)') +
+  ylab('Aggregate work time (seconds)') +
+  facet_grid(split ~ work_time_stat_name, scales='free_y') +
+  theme_bw()
+#ggsave('uds-agree-agg-work-time.png', width=4, height=4)
+ggsave('uds-agree-agg-work-time-filtered.png', width=4, height=4)
+```
+
+```{r}
+hit_data %>%
+  inner_join(irr_data) %>%
+  mutate(agree=factor(agree)) %>%
+  ggplot() +
+  geom_boxplot(aes(x=agree, y=WorkTimeInSeconds), notch=T) +
+  scale_y_log10() +
+  xlab('Number of annotators who agree') +
+  ylab('Work time (seconds; log scale)') +
+  facet_grid(split ~ ., scales='free_y') +
+  theme_bw()
+ggsave('uds-agree-agg-work-time-boxplot.png', width=3, height=8)
+```
+
+## Outlier Analysis
+
+```{r}
+hit_data %>%
+  filter(WorkTimeInSeconds > 300) %>%
+  count(Input.json_data, name='num_annotators') %>%
+  count(num_annotators)
+```
+
+```{r}
+hit_data %>%
+  filter(WorkTimeInSeconds > 300) %>%
+  select(Input.json_data) %>%
+  inner_join(hit_data) %>%
+  group_by(Input.json_data) %>%
+  mutate(max_work_time=max(WorkTimeInSeconds)) %>%
+  ungroup %>%
+  arrange(-max_work_time, Input.json_data) %>%
+  mutate(Input.json_data=as.numeric(fct_inorder(factor(Input.json_data))),
+         WorkerId=factor(WorkerId)) %>%
+  ggplot(aes(x=WorkTimeInSeconds, y=Input.json_data)) +
+  geom_point(aes(color=WorkerId)) +
+  geom_line(aes(group=Input.json_data)) +
+  geom_vline(xintercept=300, color='red') +
+  scale_x_log10() +
+  ylab('Outlying HIT') +
+  theme_bw()
+ggsave('uds-outlying-worker-work-times.png', width=5, height=4)
+```
+
+## Disagreement Resolution Analysis
+
+```{r}
+annotators <- tribble(
+  ~group_name, ~user_name,
+  'JamiesonAlexander', 'jalexa46',
+  'JTWilson', 'jwils191',
+  'BarryAdkins', 'badkins6'
+)
+data <- annotators$group_name %>%
+  map_dfr(~ read_csv(str_c('uds-train-tiebreaker-hits-assignments-2/', .x, '-results.csv'), col_types=mturk_cols)) %>%
+  mutate(Answer.answer_spans=Answer.answer_spans %>% map(~ fromJSON(.x, flatten=T))) %>%
+  left_join(split_inputs, by='Input.json_data') %>%
+  unnest(Answer.answer_spans) %>%
+  mutate(query_id=group_indices(., Input.json_data, querySpan.sentenceIndex, querySpan.startToken, querySpan.endToken),
+         answer_id=group_indices(., notPresent, sentenceIndex, startToken, endToken),
+         split=factor(split, levels=c('train', 'dev', 'test')))
+```
+

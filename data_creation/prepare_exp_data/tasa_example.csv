@@ -1,0 +1,2 @@
+"src_tokens","tar_tokens","config_obj"
+"[""the"", ""findings"", ""are"", ""being"", ""published"", ""today"", ""in"", ""the"", ""Annals"", ""of"", ""Internal"", ""Medicine"", "".""]","[""the"", ""findings"", ""are"", ""published"", ""in"", ""the"", ""July"", ""1st"", ""issue"", ""of"", ""the"", ""Annals"", ""of"", ""Internal"", ""Medicine"", "".""]","{""version"": {""MAJOR"": 1, ""MINOR"": 1, ""PATCH"": 2}}"

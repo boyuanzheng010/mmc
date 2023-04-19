@@ -1,0 +1,1683 @@
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3"
+      crossorigin="anonymous">
+
+<script src="https://code.jquery.com/jquery-3.4.1.min.js"
+        integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo="
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p"
+        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.9.1/underscore.js"
+        integrity="sha384-77p0pqpfMaY9Jg4DcGbencxtYzKWg/Z+wIFbgDlPu4bEwb2fsCrK/ph2uUprTGv8"
+        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/backbone.js/1.4.0/backbone.js"
+        integrity="sha384-nhWt56PME93S1JQLa+kxZkVkAPQAVXJ2QFp2upRdyHKS83dOhoiHLwkiWMcLjmPc"
+        crossorigin="anonymous"></script>
+
+<style>
+    /**
+     * Bootstrap button colors:
+     *
+     *     btn-primary:   #007bff
+     *     btn-secondary: #5a6268
+     *     btn-success:   #218838
+     *     btn-info:      #16a2b8
+     *     btn-warning:   #f0ad4e
+     *     btn-danger:    #dc3545
+     *     btn-dark:      #23272b
+     *
+     * We use this tool to generate the skeleton for striped buttons:
+     *
+     *     http://stripesgenerator.com
+     */
+
+    .btn-success.btn-dark {
+        background-image: linear-gradient(45deg, #218838 25%, #23272b 25%, #23272b 50%, #218838 50%, #218838 75%, #23272b 75%, #23272b 100%);
+        background-size: 28.28px 28.28px;
+    }
+    .btn-outline-success:hover {
+        color: #218838;
+        border-color: #218838;
+        background-color: transparent;
+        background-image: none;
+    }
+    .btn-outline-success.btn-dark {
+        background-image: linear-gradient(#218838, #23272b, #218838);
+        color: #fff;
+        border-color: #218838;
+        border-left-width: 2px;
+        border-right-width: 2px;
+    }
+
+    .btn-danger.btn-dark {
+        background-image: linear-gradient(45deg, #dc3545 25%, #23272b 25%, #23272b 50%, #dc3545 50%, #dc3545 75%, #23272b 75%, #23272b 100%);
+        background-size: 28.28px 28.28px;
+    }
+    .btn-outline-danger:hover {
+        color: #dc3545;
+        border-color: #dc3545;
+        background-color: transparent;
+        background-image: none;
+    }
+    .btn-outline-danger.btn-dark {
+        background-image: linear-gradient(#dc3545, #23272b, #dc3545);
+        color: #fff;
+        border-color: #dc3545;
+        border-left-width: 2px;
+        border-right-width: 2px;
+    }
+
+    .token {
+        padding: 0.1rem;
+    }
+
+    .example_sentence {
+        text-indent: 2em;
+    }
+    .example_sentence span {
+        text-indent: 0;
+    }
+</style>
+
+<script>
+    /* globals Backbone, _, $, (...?) */
+
+    /**
+
+     The DataModel object should be initialized with a JSON object with the
+     format:
+
+     {
+       "sentences": [
+         ["john", "crashed", "his", "car", "."],
+         ["the", "crash", "occurred", "in", "catonsville", "."],
+         [],
+         ["the", "end", "."]
+       ],
+       "querySpans": [
+         {
+           "sentenceIndex": 1,
+           "startToken": 0,
+           "endToken": 2
+         },
+         {
+           "sentenceIndex": 1,
+           "startToken": 4,
+           "endToken": 5
+         },
+       ],
+       "candidateSpans": [
+         {
+           "sentenceIndex": 0,
+           "startToken": 0,
+           "endToken": 1
+         },
+         {
+           "sentenceIndex": 0,
+           "startToken": 1,
+           "endToken": 4
+         },
+         {
+           "sentenceIndex": 0,
+           "startToken": 3,
+           "endToken": 4
+         },
+         {
+           "sentenceIndex": 1,
+           "startToken": 0,
+           "endToken": 2
+         },
+         {
+           "sentenceIndex": 1,
+           "startToken": 4,
+           "endToken": 5
+         },
+       ]
+     }
+
+     Empty sentences are translated into paragraph breaks.
+
+     */
+    var DataModel = Backbone.Model.extend({
+        defaults: {
+            activeQueryIndex: 0,
+            dragStartSentence: -1,
+            dragStartToken: -1,
+            dragLastSentence: -1,
+            dragLastToken: -1,
+            pendingUnselect: false,
+            answerSpans: [],
+            scrollToQuery: false,
+            showAllQueries: false,
+            sentenceNumber: 0
+        },
+        initialize: function() {
+            // for (var query of this.attributes.querySpans) {
+            //     this.attributes.answerSpans.push({
+            //         querySpan: query,
+            //         notPresent: false,
+            //         notMention: false,
+            //         sentenceIndex: -1,
+            //         startToken: -1,
+            //         endToken: -1,
+            //         status: AnswerSpanStatus.OK
+            //     });
+            // }
+            for (var query of this.attributes.querySpans) {
+                this.attributes.answerSpans.push({
+                    querySpan: query,
+                    notPresent: false,
+                    notMention: false,
+                    span_list: [{
+                        sentenceIndex: -1,
+                        startToken: -1,
+                        endToken: -1
+                    }],
+                    currentAnswerIndex: 0,
+                    status: AnswerSpanStatus.OK
+                });
+            }
+            var maxLength = _.max(_.map(this.attributes.sentences, 'length'));
+            this.attributes.candidateSpans = _.sortBy(
+                this.attributes.candidateSpans,
+                function(span) { return span.sentenceIndex * maxLength * maxLength +
+                                        span.startToken * maxLength +
+                                        span.endToken; });
+            
+            this.attributes.clickSpans = _.sortBy(
+                this.attributes.clickSpans,
+                function(span) { return span.sentenceIndex * maxLength * maxLength +
+                                        span.startToken * maxLength +
+                                        span.endToken; });
+            
+            // Add the maximum sentence length
+            
+        },
+        // clearAnswerSpan: function(answerIndex) {
+        //     this.attributes.answerSpans[answerIndex].sentenceIndex = -1;
+        //     this.attributes.answerSpans[answerIndex].startToken = -1;
+        //     this.attributes.answerSpans[answerIndex].endToken = -1;
+        // },
+        // clearAnswerSpan: function(answerIndex) {
+        //     this.attributes.answerSpans[answerIndex].span_list = [{
+        //         sentenceIndex : -1,
+        //         startToken : -1,
+        //         endToken : -1
+        //     }];
+        // },
+        clearAllAnswerSpan: function(answerIndex) {
+            this.attributes.answerSpans[answerIndex].span_list = [{
+                sentenceIndex : -1,
+                startToken : -1,
+                endToken : -1
+            }];
+            this.attributes.answerSpans[answerIndex].currentAnswerIndex = 0;
+        },
+
+        // clearSingleAnswerSpan: function(answerIndex, tokenIndex) {
+        //     answerSpanLength = this.attributes.answerSpans[answerIndex].span_list.length;
+        //     for (var i = 0; i < answerSpanLength-1; i++) {
+        //         if ((this.attributes.answerSpans[answerIndex].span_list[i].startToken <= tokenIndex) && (this.attributes.answerSpans[answerIndex].span_list[i].endToken >= tokenIndex)) {
+        //             this.attributes.answerSpans[answerIndex].span_list[answerSpanLength-1] = {
+        //                 sentenceIndex : -1,
+        //                 startToken : -1,
+        //                 endToken : -1
+        //             }
+        //         }
+        //     }
+        // },
+
+        // clearSingleAnswerSpan: function(answerIndex, tokenIndex) {
+        //     answerSpanLength = this.attributes.answerSpans[answerIndex].span_list.length;
+        //     for (var i = 0; i < answerSpanLength-1; i++) {
+        //         if ((this.attributes.answerSpans[answerIndex].span_list[i].startToken <= tokenIndex) 
+        //         && (this.attributes.answerSpans[answerIndex].span_list[i].endToken >= tokenIndex) 
+        //         && (this.attributes.answerSpans[answerIndex].currentAnswerIndex==i)) {
+        //             this.attributes.answerSpans[answerIndex].span_list[i] = {
+        //                 sentenceIndex : -1,
+        //                 startToken : -1,
+        //                 endToken : -1
+        //             }
+        //         }
+        //     }
+        //     this.trigger('change');
+        // },
+
+        clearSingleAnswerSpan: function(answerIndex, tokenIndex) {
+            var answerSpanIndex = this.attributes.answerSpans[answerIndex].currentAnswerIndex;
+            this.attributes.answerSpans[answerIndex].span_list[answerSpanIndex] = {sentenceIndex : -1, startToken : -1, endToken : -1};
+            this.trigger('change');
+        },
+
+        getSpanText: function(span) {
+            if (span.sentenceIndex !== -1) {
+                var s = '';
+                for (var ti = span.startToken; ti < span.endToken; ti++) {
+                    s += this.attributes.sentences[span.sentenceIndex][ti] + ' ';
+                }
+                return s;
+            } else {
+                return '';
+            }
+        },
+        getQuerySpanText: function(answerIndex) {
+            return this.getSpanText(this.attributes.querySpans[answerIndex]);
+        },
+        getAnswerSpanText: function(answerIndex) {
+            var answerSpanIndex = this.attributes.answerSpans[answerIndex].currentAnswerIndex;
+            // console.log("Start Get Answer Span Text:");
+            // console.log(answerSpanIndex);
+            // console.log(this.attributes.answerSpans[answerIndex].span_list);
+            // console.log(this.attributes.answerSpans[answerIndex].span_list[answerSpanIndex]);
+            // console.log(this.getSpanText(this.attributes.answerSpans[answerIndex].span_list[answerSpanIndex]));
+            // console.log("End Get Answer Span Text");
+            return this.getSpanText(this.attributes.answerSpans[answerIndex].span_list[answerSpanIndex]);
+        },
+        isPartOfAnswerSpan: function(answerIndex, si, ti) {
+            var answerSpanIndex = this.attributes.answerSpans[answerIndex].currentAnswerIndex;
+            // console.log("Current Answer Span Index:");
+            // console.log(answerSpanIndex = this.attributes.answerSpans[answerIndex].currentAnswerIndex);
+            // console.log(this.attributes.answerSpans[answerIndex].span_list[answerSpanIndex])
+            // console.log("---")
+            return spanContainsToken(this.attributes.answerSpans[answerIndex].span_list[answerSpanIndex], si, ti);
+        },
+        isPartOfAnyAnswerSpan: function(answerIndex, si, ti) {
+            var answerSpanLength = this.attributes.answerSpans[answerIndex].span_list.length;
+            for (var i = 0; i < answerSpanLength-1; i++) {
+                if (spanContainsToken(this.attributes.answerSpans[answerIndex].span_list[i], si, ti)) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        isPartOfOtherAnswerSpan: function(answerIndex, si, ti) {
+            var answerSpanLength = this.attributes.answerSpans[answerIndex].span_list.length;
+            for (var i = 0; i < answerSpanLength-1; i++) {
+                if (spanContainsToken(this.attributes.answerSpans[answerIndex].span_list[i], si, ti) && (this.attributes.answerSpans[answerIndex].currentAnswerIndex!=i)) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        isPartOfCurrentAnswerSpan: function(answerIndex, si, ti) {
+            var answerSpanIndex = this.attributes.answerSpans[answerIndex].currentAnswerIndex;
+            // console.log("Current Answer Span Index:");
+            // console.log(answerSpanIndex = this.attributes.answerSpans[answerIndex].currentAnswerIndex);
+            // console.log(this.attributes.answerSpans[answerIndex].span_list[answerSpanIndex])
+            // console.log("---")
+            return spanContainsToken(this.attributes.answerSpans[answerIndex].span_list[answerSpanIndex], si, ti);
+        },
+        // isPartOfQuerySpan: function(answerIndex, si, ti) {
+        //     return spanContainsToken(this.attributes.querySpans[answerIndex], si, ti);
+        // },
+        isPartOfQuerySpan: function(answerIndex, si, ti) {
+            return spanContainsToken(this.attributes.querySpans[answerIndex], si, ti);
+        },
+        // updateAnswerSpan: function(answerIndex, sentenceIndex, tokenIndex) {
+        //     var answerSpan = this.attributes.answerSpans[answerIndex];
+        //     if (answerSpan.sentenceIndex === -1) {
+        //         answerSpan.sentenceIndex = sentenceIndex;
+        //         answerSpan.startToken = tokenIndex;
+        //         answerSpan.endToken = tokenIndex + 1;
+        //     } else if (answerSpan.sentenceIndex === sentenceIndex) {
+        //         answerSpan.startToken = _.min([this.attributes.dragStartToken, tokenIndex]);
+        //         answerSpan.endToken = _.max([this.attributes.dragStartToken, tokenIndex]) + 1;
+        //     }
+        //     answerSpan.notPresent = false;
+        //     answerSpan.notMention = false;
+        // },
+
+        // Currently, only update the first element in span list
+        updateAnswerSpan: function(answerIndex, sentenceIndex, tokenIndex) {
+            // console.log("Start Update Answer Span:");
+            // console.log("answerIndex:" + answerIndex + " sentenceIndex:" + sentenceIndex + " tokenIndex:" + tokenIndex);
+            var answerSpan = this.attributes.answerSpans[answerIndex];
+            var answerSpanIndex = answerSpan.currentAnswerIndex;
+            var currentAnswerSpan = answerSpan[answerSpanIndex];
+
+            if (answerSpan.span_list[answerSpanIndex].sentenceIndex === -1) {
+                answerSpan.span_list[answerSpanIndex].sentenceIndex = sentenceIndex;
+                answerSpan.span_list[answerSpanIndex].startToken = tokenIndex;
+                answerSpan.span_list[answerSpanIndex].endToken = tokenIndex + 1;
+            } else if (answerSpan.span_list[answerSpanIndex].sentenceIndex === sentenceIndex) {
+                answerSpan.span_list[answerSpanIndex].startToken = _.min([this.attributes.dragStartToken, tokenIndex]);
+                answerSpan.span_list[answerSpanIndex].endToken = _.max([this.attributes.dragStartToken, tokenIndex]) + 1;
+            }
+            answerSpan.notPresent = false;
+            answerSpan.notMention = false;
+        },
+        // answerSpanIsPreceding: function(answerSpan) {
+        //     return spanPrecedes(answerSpan, answerSpan.querySpan);
+        // },
+        
+        // Currently, use the first element in span_list
+        answerSpanIsPreceding: function(answerSpan) {
+            var answerSpanIndex = answerSpan.currentAnswerIndex;
+            return spanPrecedes(answerSpan.span_list[answerSpanIndex], answerSpan.querySpan);
+        },
+
+        answerSpanIsCandidate: function(answerSpan) {
+            var answerSpanIndex = answerSpan.currentAnswerIndex;
+            return _.some(
+                this.attributes.candidateSpans,
+                function(candidateSpan) {
+                    return spanEquals(answerSpan.span_list[answerSpanIndex], candidateSpan);
+                });
+        },
+        // answerSpanIsCandidate: function(answerSpan) {
+        //     return _.some(
+        //         this.attributes.candidateSpans,
+        //         function(candidateSpan) {
+        //             return spanEquals(answerSpan, candidateSpan);
+        //         });
+        // },
+        // validateAnswerSpans: function() {
+        //     for (var answerSpan of this.attributes.answerSpans) {
+        //         answerSpan.status = AnswerSpanStatus.OK;
+        //         if (answerSpan.sentenceIndex === -1) {
+        //             if ((!answerSpan.notPresent) && (!answerSpan.notMention)) {
+        //                 answerSpan.status = AnswerSpanStatus.NOT_SELECTED;
+        //             }
+        //         } else {
+        //             if (! this.answerSpanIsPreceding(answerSpan)) {
+        //                 answerSpan.status = AnswerSpanStatus.NOT_PRECEDING;
+        //             } else if (! this.answerSpanIsCandidate(answerSpan)) {
+        //                 answerSpan.status = AnswerSpanStatus.NOT_CANDIDATE;
+        //             }
+        //         }
+        //     }
+        //     return ! _.some(
+        //         this.attributes.answerSpans,
+        //         function(span) { return span.status !== AnswerSpanStatus.OK });
+        // },
+        
+        // For this version: use the span_list[-1]
+        validateAnswerSpans: function() {
+            for (var answerSpan of this.attributes.answerSpans) {
+                var answerSpanIndex = answerSpan.currentAnswerIndex;
+                answerSpan.status = AnswerSpanStatus.OK;
+                if (answerSpan.span_list[answerSpanIndex].sentenceIndex === -1) {
+                    if ((!answerSpan.notPresent) && (!answerSpan.notMention)) {
+                        answerSpan.status = AnswerSpanStatus.NOT_SELECTED;
+                    }
+                } else {
+                    if (! this.answerSpanIsPreceding(answerSpan)) {
+                        answerSpan.status = AnswerSpanStatus.NOT_PRECEDING;
+                    } else if (! this.answerSpanIsCandidate(answerSpan)) {
+                        answerSpan.status = AnswerSpanStatus.NOT_CANDIDATE;
+                    }
+                }
+            }
+            return ! _.some(
+                this.attributes.answerSpans,
+                function(span) { return span.status !== AnswerSpanStatus.OK });
+        },
+        toggleNotPresent: function(answerIndex) {
+            this.attributes.answerSpans[answerIndex].notPresent = !this.attributes.answerSpans[answerIndex].notPresent;
+            return this.attributes.answerSpans[answerIndex].notPresent;
+        },
+        toggleNotMention: function(answerIndex) {
+            this.attributes.answerSpans[answerIndex].notMention = !this.attributes.answerSpans[answerIndex].notMention;
+            return this.attributes.answerSpans[answerIndex].notMention;
+        },
+
+        setDrag: function(startSentence, startToken, lastSentence, lastToken) {
+            this.attributes.dragStartSentence = startSentence;
+            this.attributes.dragStartToken = startToken;
+            this.attributes.dragLastSentence = lastSentence;
+            this.attributes.dragLastToken = lastToken;
+        },
+        updateDrag: function(lastSentence, lastToken) {
+            this.attributes.dragLastSentence = lastSentence;
+            this.attributes.dragLastToken = lastToken;
+        },
+        // // Choose from the query span
+        // getRelevantCandidateSpans: function(answerIndex) {
+        //     var answerSpan = this.attributes.answerSpans[answerIndex];
+        //     return _.filter(this.attributes.clickSpans, function(clickSpan) {
+        //         return (spanOverlaps(clickSpan, answerSpan) &&
+        //             spanPrecedes(clickSpan, answerSpan.querySpan));
+        //     });
+        // },
+        getRelevantCandidateSpans: function(answerIndex) {
+            var answerSpan = this.attributes.answerSpans[answerIndex];
+            var answerSpanIndex = answerSpan.currentAnswerIndex;
+            return _.filter(this.attributes.clickSpans, function(clickSpan) {
+                return (spanOverlaps(clickSpan, answerSpan.span_list[answerSpanIndex]) &&
+                    spanPrecedes(clickSpan, answerSpan.querySpan));
+            });
+        },
+        // // Use all query spans to construct candidate spans
+        // getRelevantCandidateSpans: function(answerIndex) {
+        //     var answerSpan = this.attributes.answerSpans[answerIndex];
+        //     return _.filter(this.attributes.candidateSpans, function(candidateSpan) {
+        //         return (spanOverlaps(candidateSpan, answerSpan) &&
+        //             spanPrecedes(candidateSpan, answerSpan.querySpan));
+        //     });
+        // },
+        setActiveQueryIndex: function(activeQueryIndex) {
+            this.attributes.activeQueryIndex = activeQueryIndex;
+            this.attributes.scrollToQuery = true;
+        },
+        stepActiveQueryIndex: function(forward) {
+            if (forward) {
+                this.setActiveQueryIndex(
+                    (this.attributes.activeQueryIndex + 1) %
+                    this.attributes.answerSpans.length);
+            } else {
+                this.setActiveQueryIndex(
+                    this.attributes.activeQueryIndex === 0 ?
+                        this.attributes.answerSpans.length - 1 :
+                        this.attributes.activeQueryIndex - 1);
+            }
+            this.attributes.scrollToQuery = true;
+        },
+        skipActiveQueryIndex: function(forward) {
+            var skipSize = 10;
+            if (forward) {
+                this.setActiveQueryIndex(Math.min(
+                    this.attributes.activeQueryIndex + skipSize,
+                    this.attributes.answerSpans.length - 1));
+            } else {
+                this.setActiveQueryIndex(Math.max(
+                    this.attributes.activeQueryIndex - skipSize,
+                    0));
+            }
+            this.attributes.scrollToQuery = true;
+        },
+        toggleShowAllQueries: function() {
+            this.attributes.showAllQueries = !this.attributes.showAllQueries;
+            return this.attributes.showAllQueries;
+        },
+        stepSelection: function(forward) {
+            var numSentences = this.attributes.sentences.length;
+            var sentenceLengths = _.map(this.attributes.sentences, 'length');
+            var tokenSpans = _.flatten(
+                _.map(
+                    _.range(numSentences),
+                    function(sentenceIndex) {
+                        return _.map(
+                            _.range(sentenceLengths[sentenceIndex]),
+                            function(tokenIndex) {
+                                return {
+                                    sentenceIndex: sentenceIndex,
+                                    startToken: tokenIndex,
+                                    endToken: tokenIndex + 1
+                                };
+                            });
+                    }));
+            if (tokenSpans.length > 0) {
+                var spanBoundaryEquals = spanEndEquals;
+                if (! forward) {
+                    spanBoundaryEquals = spanStartEquals;
+                    tokenSpans.reverse();
+                }
+                var activeQuerySpan = this.attributes.answerSpans[this.attributes.activeQueryIndex];
+                var newTokenSpan = tokenSpans[
+                    (activeQuerySpan.sentenceIndex === -1) ?
+                        0 :
+                        (_.findIndex(
+                            tokenSpans,
+                            function (tokenSpan) {
+                                return spanBoundaryEquals(activeQuerySpan, tokenSpan);
+                            }) + 1) % tokenSpans.length];
+                activeQuerySpan.sentenceIndex = newTokenSpan.sentenceIndex;
+                activeQuerySpan.startToken = newTokenSpan.startToken;
+                activeQuerySpan.endToken = newTokenSpan.endToken;
+            }
+        },
+        activateClosestUnfinishedAnswer: function() {
+            this.validateAnswerSpans();
+            var numAnswers = this.attributes.answerSpans.length;
+            var currentIndex = this.attributes.activeQueryIndex;
+            if (this.attributes.answerSpans[currentIndex].status === AnswerSpanStatus.OK) {
+                for (var i = (currentIndex + 1) % numAnswers;
+                     i !== currentIndex;
+                     i = (i + 1) % numAnswers) {
+                    if (this.attributes.answerSpans[i].status !== AnswerSpanStatus.OK) {
+                        this.attributes.activeQueryIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    var CandidateListView = Backbone.View.extend({
+        el: '#candidate_list',
+        events: {
+            'click button.clickable': 'onClick',
+            'click button.next_answer': 'nextAnswer',
+            'click button.cancel_answer': 'cancelAnswer',
+        },
+        // selectCandidateByKey: function(key) {
+        //     var keyInt = parseInt(key);
+        //     if (key == 'n') {
+        //         this.selectCandidate(-1, -1);
+        //     } else if (key == 'p') {
+        //         this.selectCandidate(-2, -2);
+        //     } else if (!isNaN(keyInt) && 0 < keyInt && keyInt < 10) {
+        //         var button = this.$('button').filter(function() {
+        //             return $(this).data('index') == keyInt
+        //         });
+        //         if (button !== undefined) {
+        //             var startToken = button.data('start_token');
+        //             var endToken = button.data('end_token');
+        //             this.selectCandidate(startToken, endToken);
+        //         }
+        //     }
+        // },
+        selectCandidateByKey: function(key) {
+            var keyInt = parseInt(key);
+            if (key == 'q') {
+                this.selectCandidate(-1, -1);
+            } else if (key == 'w') {
+                this.selectCandidate(-2, -2);
+            } else if ('slprhab'.split('').includes(key)) {
+                // console.log("Start Select Character by Key");
+                // console.log(key);
+                this.selectCharacter(key);
+            } else if (!isNaN(keyInt) && 0 < keyInt && keyInt < 10) {
+                var button = this.$('button').filter(function() {
+                    return $(this).data('index') == keyInt
+                });
+                if (button !== undefined) {
+                    var startToken = button.data('start_token');
+                    var endToken = button.data('end_token');
+                    this.selectCandidate(startToken, endToken);
+                }
+            }
+        },
+
+        selectCandidate: function(startToken, endToken) {
+            var activeQueryIndex = this.model.attributes.activeQueryIndex;
+            var answerSpanIndex = this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex;
+            // if startToken===-1 or endToken===-1, then this belongs to notPresent or notMention
+            // Check what the startToken and endToken of NotPresent and notMention is set in former file
+            if (startToken === -1 && endToken === -1) {
+                var notPresent = this.model.toggleNotPresent(activeQueryIndex);
+                if (notPresent) {
+                    this.model.clearAllAnswerSpan(activeQueryIndex);
+                }
+            // If it is valid span, write into answer spans [activeQueryIndex], then this activeQuery's antecedent is selected
+            } else {
+                if (startToken === -2 && endToken === -2) {
+                    var notMention = this.model.toggleNotMention(activeQueryIndex);
+                    if (notMention) {
+                        this.model.clearAllAnswerSpan(activeQueryIndex);
+                    }
+                } else {
+                    this.model.attributes.answerSpans[activeQueryIndex].span_list[answerSpanIndex].startToken = startToken;
+                    this.model.attributes.answerSpans[activeQueryIndex].span_list[answerSpanIndex].endToken = endToken;
+                }
+            }
+            this.model.trigger('change');
+        },
+
+        selectNextAnswer: function(startToken, endToken) {
+            var activeQueryIndex = this.model.attributes.activeQueryIndex;
+            var lastAnswerIndex = this.model.attributes.answerSpans[activeQueryIndex].span_list.length - 1;
+            var lastAnswer = this.model.attributes.answerSpans[activeQueryIndex].span_list[lastAnswerIndex];
+
+            if ((lastAnswer.sentenceIndex==-1) && (lastAnswer.startToken==-1) && (lastAnswer.endToken==-1)) {
+                this.model.trigger('change');
+            } else {
+                // Create a new element in span_list
+                this.model.attributes.answerSpans[activeQueryIndex].span_list.push({sentenceIndex: -1,startToken: -1,endToken: -1});
+                // Increase the current Answer Index
+                this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex += 1;
+                this.model.trigger('change');
+            }
+        },
+        selectCancelAnswer: function() {
+            var activeQueryIndex = this.model.attributes.activeQueryIndex;
+
+            if (this.model.attributes.answerSpans[activeQueryIndex].span_list.length==1) {
+                // If length of span list == 1, make the list as initialization
+                this.model.attributes.answerSpans[activeQueryIndex].span_list = [{sentenceIndex: -1, startToken: -1, endToken: -1}];
+                this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex = 0;
+            } else {
+                // If length of span list >= 2, pop
+                var temp = this.model.attributes.answerSpans[activeQueryIndex].span_list;
+                var temp_pop = temp.pop();
+                var temp_answer_index = this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex;
+                var currentAnswerIndex = temp_answer_index - 1;
+                console.log("Start Pop");
+                console.log(temp);
+                console.log(temp_answer_index);
+                this.model.attributes.answerSpans[activeQueryIndex].span_list = temp;
+                this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex = currentAnswerIndex;
+                console.log(this.model.attributes.answerSpans[activeQueryIndex].span_list);
+                console.log(this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex);
+            }
+            this.model.trigger('change');
+        },
+
+        selectCharacter: function(characterShort) {
+            var activeQueryIndex = this.model.attributes.activeQueryIndex;
+            var answerSpanIndex = this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex;
+            var sentenceIndex = this.model.attributes.querySpans[activeQueryIndex].sentenceIndex;
+
+            // Define Character Name
+            if (characterShort == 's') {
+                var character = "Sheldon";
+            } else if (characterShort == 'l') {
+                var character = "Leonard";
+            } else if (characterShort == 'l') {
+                var character = "Leonard";
+            } else if (characterShort == 'p') {
+                var character = "Penny";
+            } else if (characterShort == 'r') {
+                var character = "Raj";
+            } else if (characterShort == 'h') {
+                var character = "Howard";
+            } else if (characterShort == 'a') {
+                var character = "Amy";
+            } else if (characterShort == 'b') {
+                var character = "Bernadette";
+            }
+
+            // Iterate characters from current sentence to the start sentence
+            console.log("Start the Loop");
+            for (var i = 0; i <= sentenceIndex; i++) {
+                console.log("Looping Index:" + i);
+                var currentSentence = this.model.attributes.sentences[sentenceIndex - i];
+                if (currentSentence.length < 1) {
+                    // If the sentence is null, then pass
+                    continue;
+                } else {
+                    var CharacterToIterate = currentSentence[0];
+                    console.log(character, CharacterToIterate);
+                    // Check whether the character is target
+                    if (character == CharacterToIterate) {
+                        console.log("Find the target");
+                        console.log(character, CharacterToIterate);
+                        console.log(answerSpanIndex);
+                        console.log(sentenceIndex);
+                        // If character is the target, enter the character
+                        this.model.attributes.answerSpans[activeQueryIndex].span_list[answerSpanIndex].startToken = 0;
+                        this.model.attributes.answerSpans[activeQueryIndex].span_list[answerSpanIndex].endToken = 1;
+                        this.model.attributes.answerSpans[activeQueryIndex].span_list[answerSpanIndex].sentenceIndex = sentenceIndex - i;
+                        
+                        this.model.trigger('change');
+                        break;
+                    }
+                }
+                
+            }
+        },
+
+        onClick: function(event) {
+            var startToken = $(event.currentTarget).data('start_token');
+            var endToken = $(event.currentTarget).data('end_token');
+            this.selectCandidate(startToken, endToken);
+        },
+        nextAnswer: function(event) {
+            var startToken = $(event.currentTarget).data('start_token');
+            var endToken = $(event.currentTarget).data('end_token');
+            this.selectNextAnswer(startToken, endToken);
+        },
+        cancelAnswer: function(event) {
+            var startToken = $(event.currentTarget).data('start_token');
+            var endToken = $(event.currentTarget).data('end_token');
+            this.selectCancelAnswer(startToken, endToken);
+        },
+        // nextAnswer: function(event) {
+        //     var startToken = $(event.currentTarget).data('start_token');
+        //     var endToken = $(event.currentTarget).data('end_token');
+        //     var activeQueryIndex = this.model.attributes.activeQueryIndex;
+
+        //     var lastAnswerIndex = this.model.attributes.answerSpans[activeQueryIndex].span_list.length - 1;
+        //     var lastAnswer = this.model.attributes.answerSpans[activeQueryIndex].span_list[lastAnswerIndex];
+
+        //     if ((lastAnswer.sentenceIndex==-1) && (lastAnswer.startToken==-1) && (lastAnswer.endToken==-1)) {
+        //         this.model.trigger('change');
+        //     } else {
+        //         // Create a new element in span_list
+        //         this.model.attributes.answerSpans[activeQueryIndex].span_list.push({sentenceIndex: -1,startToken: -1,endToken: -1});
+        //         // Increase the current Answer Index
+        //         this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex += 1;
+        //         this.model.trigger('change');
+        //     }
+        // },
+        // cancelAnswer: function(event) {
+        //     var startToken = $(event.currentTarget).data('start_token');
+        //     var endToken = $(event.currentTarget).data('end_token');
+        //     var activeQueryIndex = this.model.attributes.activeQueryIndex;
+
+        //     if (this.model.attributes.answerSpans[activeQueryIndex].span_list.length==1) {
+        //         // If length of span list == 1, make the list as initialization
+        //         this.model.attributes.answerSpans[activeQueryIndex].span_list = [{sentenceIndex: -1, startToken: -1, endToken: -1}];
+        //         this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex = 0;
+        //     } else {
+        //         // If length of span list >= 2, pop
+        //         var temp = this.model.attributes.answerSpans[activeQueryIndex].span_list;
+        //         var temp_pop = temp.pop();
+        //         var temp_answer_index = this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex;
+        //         var currentAnswerIndex = temp_answer_index - 1;
+        //         console.log("Start Pop");
+        //         console.log(temp);
+        //         console.log(temp_answer_index);
+        //         this.model.attributes.answerSpans[activeQueryIndex].span_list = temp;
+        //         this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex = currentAnswerIndex;
+        //         console.log(this.model.attributes.answerSpans[activeQueryIndex].span_list);
+        //         console.log(this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex);
+        //     }
+        //     this.model.trigger('change');
+        // },
+        render: function() {
+            this.$el.empty();
+
+            this.$el.append($('<h5>').text('Overlapping Candidates'));
+
+            var activeQueryIndex = this.model.attributes.activeQueryIndex;
+            var activeQuerySpan = this.model.attributes.answerSpans[activeQueryIndex];
+            var index = 1;
+            if (activeQuerySpan.status === AnswerSpanStatus.NOT_SELECTED) {
+                this.$el.append($('<div>')
+                    .addClass('alert alert-warning')
+                    .text('Select a mention in the text to see the candidates that overlap it.'));
+            } else {
+                if (activeQuerySpan.status === AnswerSpanStatus.NOT_PRECEDING) {
+                    this.$el.append($('<div>')
+                        .addClass('alert alert-danger')
+                        .text('Please select a mention in the text that precedes the highlighted mention.'));
+                } else {
+                    var clickSpans = this.model.getRelevantCandidateSpans(activeQueryIndex);
+                    if (clickSpans.length === 0) {
+                        this.$el.append($('<div>')
+                            .addClass('alert alert-warning')
+                            .text('No overlapping candidates.'));
+                    } else {
+                        // Exam whether the selected span is within query spans
+                        for (var clickSpan of clickSpans) {
+                            var usableIndex = (0 < index && index < 10);
+                            var answerSpanIndex = activeQuerySpan.currentAnswerIndex;
+                            this.$el.append($('<button>')
+                                .addClass('btn text-start clickable')
+                                .addClass(spanEquals(activeQuerySpan.span_list[answerSpanIndex], clickSpan) ?
+                                    'btn-dark' :
+                                    'btn-outline-dark')
+                                .attr('type', 'button')
+                                .data('start_token', clickSpan.startToken)
+                                .data('end_token', clickSpan.endToken)
+                                .data('index', usableIndex ? index : -1)
+                                .text((usableIndex ? '(' + index + ') ' : '') +
+                                    this.model.getSpanText(clickSpan)));
+                            ++index;
+                        }
+                    }
+                }
+            }
+
+            this.$el.append($('<h5>').text('Plural Entities'));
+            this.$el.append($('<button>')
+                .addClass('btn text-start next_answer next_answer_button')
+                .addClass(nextAnswerClass)
+                .attr('type', 'button')
+                .data('start_token', -2)
+                .data('end_token', -2)
+                .data('index', -1)
+                .text(nextAnswerButtonText));   
+            this.$el.append($('<button>')
+                .addClass('btn text-start cancel_answer cancel_answer_button')
+                .addClass(cancelAnswerClass)
+                .attr('type', 'button')
+                .data('start_token', -2)
+                .data('end_token', -2)
+                .data('index', -1)
+                .text(cancelAnswerButtonText));   
+            
+            this.$el.append($('<h5>').text('No answer reason:'));
+            this.$el.append($('<button>')
+                .addClass('btn text-start clickable answer_not_present_button')
+                .addClass(notPresentClass)
+                .addClass(activeQuerySpan.notPresent ? 'active' : '')
+                .attr('type', 'button')
+                .data('start_token', -1)
+                .data('end_token', -1)
+                .data('index', -1)
+                .text(notPresentButtonText));
+
+            this.$el.append($('<button>')
+                .addClass('btn text-start clickable answer_not_mention_button')
+                .addClass(notMentionClass)
+                .addClass(activeQuerySpan.notMention ? 'active' : '')
+                .attr('type', 'button')
+                .data('start_token', -2)
+                .data('end_token', -2)
+                .data('index', -1)
+                .text(notMentionButtonText));
+                    
+            return this;
+        }
+    });
+
+
+    var SentenceView = Backbone.View.extend({
+        el: '#sentence_list',
+        events: {
+            'mousedown .token': 'onStartDrag',
+            'mouseleave .token': 'onDragLeave',
+            'mouseenter .token': 'onDrag',
+            'click .select_query_button': 'onSelectQuery',
+            'click .step_query_button': 'onStepQuery',
+            'click .skip_query_button': 'onSkipQuery',
+            'click .show_all_queries_button': 'onShowAllQueries'
+        },
+        onStartDrag: function(event) {
+            console.log("-----Use onStartDrag Function-----")
+
+            var si = $(event.currentTarget).data('sentence_index');
+            var ti = $(event.currentTarget).data('token_index');
+            console.log("Si:" + si + "  Ti:" + ti);
+
+            var activeQueryIndex = this.model.attributes.activeQueryIndex;
+            var activeQuerySpan = this.model.attributes.answerSpans[activeQueryIndex];
+
+            var answerSpanIndex = activeQuerySpan.currentAnswerIndex;
+            this.model.attributes.pendingUnselect = (
+                activeQuerySpan.span_list[answerSpanIndex].sentenceIndex == si &&
+                activeQuerySpan.span_list[answerSpanIndex].startToken == ti &&
+                activeQuerySpan.span_list[answerSpanIndex].endToken == ti + 1
+            );
+            console.log("Start Clear Single Answer Span");
+            // this.model.clearAllAnswerSpan(activeQueryIndex);
+            this.model.clearSingleAnswerSpan(activeQueryIndex, ti);
+            console.log(activeQuerySpan.span_list);
+            console.log(this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex);
+            this.model.updateAnswerSpan(activeQueryIndex, si, ti);
+            console.log(activeQuerySpan.span_list)
+            console.log(this.model.attributes.answerSpans[activeQueryIndex].currentAnswerIndex);
+
+            this.model.setDrag(si, ti, si, ti);
+            console.log("Dragging Parameters:" + this.model.dragStartSentence + this.model.dragStartToken +this.model.dragLastSentence +this.model.dragLastToken);
+            this.model.trigger('change');
+            console.log("-----End onStartDrag Function-----")
+        },
+        onDrag: function(event) {
+            var si = $(event.currentTarget).data('sentence_index');
+            var ti = $(event.currentTarget).data('token_index');
+            if (si === this.model.attributes.dragStartSentence && (
+                    si != this.model.attributes.dragLastSentence ||
+                        ti != this.model.attributes.dragLastToken)) {
+                this.model.updateAnswerSpan(this.model.attributes.activeQueryIndex, si, ti);
+                this.model.trigger('change');
+            }
+            this.model.updateDrag(si, ti);
+        },
+        onDragLeave: function(event) {
+            this.model.attributes.pendingUnselect = false;
+        },
+        onStepQuery: function(event) {
+            var forward = $(event.currentTarget).data('forward');
+            this.model.stepActiveQueryIndex(forward);
+            this.model.trigger('change');
+        },
+        onSkipQuery: function(event) {
+            var forward = $(event.currentTarget).data('forward');
+            this.model.skipActiveQueryIndex(forward);
+            this.model.trigger('change');
+        },
+        onSelectQuery: function(event) {
+            var queryIndex = $(event.currentTarget).data('query_index');
+            this.model.setActiveQueryIndex(queryIndex);
+            this.model.trigger('change');
+        },
+        onShowAllQueries: function(event) {
+            this.model.toggleShowAllQueries();
+            this.model.trigger('change');
+        },
+        makeQueryButton: function(queryIndex) {
+            var answerSpan = this.model.attributes.answerSpans[queryIndex];
+            var activeQueryIndex = this.model.attributes.activeQueryIndex;
+            var isValid = (answerSpan.status === AnswerSpanStatus.OK);
+            return $('<button>')
+                .addClass('select_query_button btn m-1')
+                .addClass(isValid ?
+                    (queryIndex === activeQueryIndex ?
+                        'btn-success font-weight-bold' :
+                        'btn-outline-success') :
+                    (queryIndex === activeQueryIndex ?
+                        'btn-danger font-weight-bold' :
+                        'btn-outline-danger'))
+                .addClass(this.model.attributes.querySpans.length === 1 ? 'disabled' : '')
+                .attr('type', 'button')
+                .data('query_index', queryIndex)
+                .text(this.model.getQuerySpanText(queryIndex));
+        },
+        render: function() {
+            this.$el.empty();
+
+            // Shwo all the utterances
+            var sentences = this.model.get('sentences');
+            var activeQueryIndex = this.model.get('activeQueryIndex');
+            var activeQuerySpan = this.model.attributes.answerSpans[activeQueryIndex];
+            var activeQueryIsValid = (activeQuerySpan.status === AnswerSpanStatus.OK);
+            var activeAnswerSpanText = this.model.getAnswerSpanText(activeQueryIndex);
+            var activeQuerySpanText = this.model.getQuerySpanText(activeQueryIndex);
+
+            var statusDiv = $('<div>')
+                .addClass('mb-1')
+                .append($('<i>').addClass('me-2 mt-1').text('Active query:'))
+                .append($('<div>')
+                    .addClass('btn p-1 me-4 mt-1 font-weight-bold' + (activeQueryIsValid ?
+                        ' btn-success' :
+                        ' btn-danger'))
+                    .text(activeQuerySpanText))
+                
+                                // Add "Answer:" and the selected answer span
+                                .append($('<i>').addClass('me-2 mt-1').text('Answer:'))
+                .append($('<div>')
+                    .addClass('btn p-1 me-4 mt-1' + (activeQueryIsValid ? ((activeQuerySpan.notPresent || activeQuerySpan.notMention) ? ' btn-primary' : ' btn-dark') :' btn-dark disabled'))
+                    .text(activeQueryIsValid ? (activeQuerySpan.notPresent ? notPresentText : (activeQuerySpan.notMention ? notMentionText: activeAnswerSpanText)) : activeAnswerSpanText + ' (invalid)'));
+
+            var queriesDiv = $('<div>')
+                .addClass('d-flex justify-content-between')
+                .append($('<div>')
+                    .addClass('d-flex')
+                    .append($('<button>')
+                        .addClass('btn btn-outline-primary skip_query_button m-1')
+                        .addClass(this.model.attributes.querySpans.length === 1 ? 'disabled' : '')
+                        .data('forward', false)
+                        .attr('type', 'button')
+                        .attr('aria-label', 'Skip 10 queries backward')
+                        .append($('<span>').attr('aria-hidden', 'true').text('«')))
+                    .append($('<button>')
+                        .addClass('btn btn-outline-primary step_query_button m-1')
+                        .addClass(this.model.attributes.querySpans.length === 1 ? 'disabled' : '')
+                        .data('forward', false)
+                        .attr('type', 'button')
+                        .attr('aria-label', 'Previous query')
+                        .append($('<span>').attr('aria-hidden', 'true').text('‹'))));
+            var queryListRadius = 2;
+            var queryListSize = 2 * queryListRadius + 1;
+            var queryListStart = Math.max(activeQueryIndex - queryListRadius, 0);
+            var queryListEnd = Math.min(activeQueryIndex + 1 + queryListRadius, this.model.attributes.querySpans.length);
+            if (queryListStart === 0) {
+                queryListEnd = Math.min(this.model.attributes.querySpans.length, queryListStart + queryListSize);
+            }
+            if (queryListEnd === this.model.attributes.querySpans.length) {
+                queryListStart = Math.max(0, queryListEnd - queryListSize);
+            }
+            var queryListContinuesStart = queryListStart > 0;
+            var queryListContinuesEnd = queryListEnd < this.model.attributes.querySpans.length;
+            var queryListContinues = queryListContinuesStart || queryListContinuesEnd;
+            var queryListDiv = $('<div>')
+                .addClass('d-flex px-2 mx-1 overflow-auto');
+            if (queryListContinuesStart) {
+                queryListDiv.append($('<div>')
+                    .addClass('text-nowrap m-1 pe-2')
+                    .text('. . .'));
+            }
+            for (var queryIndex = queryListStart; queryIndex < queryListEnd; queryIndex++) {
+                queryListDiv.append(this.makeQueryButton(queryIndex));
+            }
+            if (queryListContinuesEnd) {
+                queryListDiv.append($('<div>')
+                    .addClass('text-nowrap m-1 ps-2')
+                    .text('. . .'));
+            }
+            queriesDiv.append(queryListDiv)
+                .append($('<div>')
+                    .addClass('d-flex')
+                    .append($('<button>')
+                        .addClass('btn btn-outline-primary step_query_button m-1')
+                        .addClass(this.model.attributes.querySpans.length === 1 ? 'disabled' : '')
+                        .data('forward', true)
+                        .attr('type', 'button')
+                        .attr('aria-label', 'Next query')
+                        .append($('<span>').attr('aria-hidden', 'true').text('›')))
+                    .append($('<button>')
+                        .addClass('btn btn-outline-primary skip_query_button m-1')
+                        .addClass(this.model.attributes.querySpans.length === 1 ? 'disabled' : '')
+                        .data('forward', true)
+                        .attr('type', 'button')
+                        .attr('aria-label', 'Skip ten queries forward')
+                        .append($('<span>').attr('aria-hidden', 'true').text('»')))
+                    .append($('<button>')
+                        .addClass('btn btn-outline-primary show_all_queries_button m-1 text-nowrap')
+                        .addClass(queryListContinues ? '' : 'disabled')
+                        .addClass(this.model.attributes.showAllQueries ? 'active' : '')
+                        .attr('type', 'button')
+                        .text('Show all')));
+
+            var allQueriesDiv = $('<div>')
+                .addClass('p-2 collapse')
+                .addClass(this.model.attributes.showAllQueries ? 'show' : '');
+            for (var queryIndex = 0; queryIndex < this.model.attributes.querySpans.length; queryIndex++) {
+                allQueriesDiv.append(this.makeQueryButton(queryIndex));
+            }
+
+            var navDiv = $('<div>')
+                .append($('<div>')
+                    .append($('<i>')
+                        .addClass('me-2 mt-1')
+                        .addClass(this.model.attributes.querySpans.length === 1 ? 'text-muted' : '')
+                        .text('Queries:'))
+                    .append(queriesDiv))
+                .append(allQueriesDiv);
+
+            var statusNavDiv = $('<div>')
+                .addClass('sticky-top bg-white p-3 border')
+                .append(statusDiv)
+                .append(navDiv);
+            this.$el.append(statusNavDiv);
+
+            var textDiv = $('<div>')
+                .addClass('my-3')
+                .append($('<h5>').text('Text'));
+            var activeQueryElement = null;
+            var paragraph = $('<p>');
+            for (var si = 0; si < sentences.length; si++) {
+                if (sentences[si].length === 0) {
+                    textDiv.append(paragraph);
+                    paragraph = $('<p>');
+                } else {
+                    for (var ti = 0; ti < sentences[si].length; ti++) {
+                        var tokenSpan = $('<span>')
+                            .addClass('btn token ')
+                            .data('sentence_index', si)
+                            .data('token_index', ti)
+                            .text(sentences[si][ti]);
+                        
+                        // Try to use the last token in sentence as the active Query Element
+                        if (this.model.isPartOfQuerySpan(activeQueryIndex, si, ti)) {
+                            if (activeQueryElement === null) {
+                                activeQueryElement = tokenSpan;
+                            }
+                            tokenSpan.addClass(activeQueryIsValid ?
+                                'btn-success font-weight-bold' :
+                                'btn-danger font-weight-bold');
+                        }
+                        // Current Answer Span
+                        if (this.model.isPartOfCurrentAnswerSpan(activeQueryIndex, si, ti)) {
+                            tokenSpan.addClass(activeQuerySpanClass);
+                        }
+                        // Former Answer Span
+                        if (this.model.isPartOfOtherAnswerSpan(activeQueryIndex, si, ti)) {
+                            tokenSpan.addClass(activeQuerySpanClass);
+                            tokenSpan.addClass('disabled');
+                            // if (! activeQueryIsValid) {
+                            //     tokenSpan.addClass('disabled');
+                            // }
+                        }
+                        // For the speaker button
+                        if(ti===0){
+                            if (this.model.isPartOfOtherAnswerSpan(activeQueryIndex, si, ti)) {
+                                tokenSpan.addClass(activeQuerySpanClass);
+                            } else {
+                                tokenSpan.addClass('btn-outline-primary');
+                            }
+                        }
+
+                        paragraph.append(tokenSpan);
+
+                        var whitespaceSpan = $('<span>')
+                            .addClass('whitespace')
+                            .text(' ');
+                        paragraph.append(whitespaceSpan);
+                    }
+
+                    paragraph.append($('<p>'))
+                    
+                    
+                }
+            }
+            textDiv.append(paragraph);
+            this.$el.append(textDiv);
+
+            if (this.model.attributes.scrollToQuery && activeQueryElement !== null) {
+                this.model.attributes.scrollToQuery = false;
+                activeQueryElement[0].scrollIntoView(false);
+            }
+
+            return this;
+        }
+    });
+
+    var AppView = Backbone.View.extend({
+        el: '#content',
+        events: {
+            'mouseup': 'onEndDrag'
+        },
+        initialize: function() {
+            this.candidateListView = new CandidateListView({model: this.model});
+            this.sentenceView = new SentenceView({model: this.model});
+            this.listenTo(this.model, 'change', this.render);
+        },
+        onKey: function(event) {
+            var oe = event.originalEvent;
+            if (! oe.altKey && ! oe.ctrlKey && ! oe.metaKey) {
+                var shift = oe.shiftKey;
+                var key = oe.key;
+                if (key === 'Tab') {
+                    event.preventDefault();
+                    this.model.stepActiveQueryIndex(!shift);
+                    this.model.trigger('change');
+                } else if (key === '?') {
+                    event.preventDefault();
+                    $('#keyboard_shortcuts').modal('toggle');
+                } else if (key === 'i') {
+                    event.preventDefault();
+                    $('#instructions').collapse('toggle');
+                } else if (key === 'n') {
+                    event.preventDefault();
+                    this.candidateListView.selectNextAnswer();
+                } else if (key === 'm') {
+                    event.preventDefault();
+                    this.candidateListView.selectCancelAnswer();
+                } else if (key === 'ArrowRight' || key === 'ArrowLeft') {
+                    event.preventDefault();
+                    this.model.stepSelection(key === 'ArrowRight');
+                    this.model.trigger('change');
+                } else if ('123456789qw'.split('').includes(key)) {
+                    event.preventDefault();
+                    this.candidateListView.selectCandidateByKey(key);
+                } else if ('slprhab'.split('').includes(key)) {
+                    event.preventDefault();
+                    this.candidateListView.selectCandidateByKey(key);
+                }
+            }
+        },
+        onSubmit: function(event) {
+            if (this.model.validateAnswerSpans()) {
+                var output = this.model.attributes.answerSpans;
+                $("#answer_spans").val(JSON.stringify(output));
+                $('#alerts').attr('class', '').text('');
+                return true;
+            } else {
+                this.model.trigger('change');
+                $('#alerts')
+                    .attr('class', 'alert alert-danger')
+                    .text('Please ensure a valid previous mention or "' + notPresentText + '" has been selected for each query.');
+                return false;
+            }
+        },
+        render: function() {
+            $('#alerts').removeClass();
+            $('#alerts').empty();
+            // console.log("Original Data Model:");
+            // console.log(this.model);
+
+            this.model.validateAnswerSpans();
+            // console.log("New Data Model:");
+            // console.log(this.model);
+
+            this.sentenceView.render();
+            this.candidateListView.render();
+        },
+        onEndDrag: function(event) {
+            this.model.setDrag(-1, -1, -1, -1);
+            if (this.model.attributes.pendingUnselect) {
+                var activeQueryIndex = this.model.attributes.activeQueryIndex;
+                this.model.clearAllAnswerSpan(activeQueryIndex);
+                this.model.attributes.pendingUnselect = false;
+                this.model.trigger('change');
+            }
+        }
+    });
+
+    const notPresentText = 'no previous mention';
+    const notPresentButtonText = '(q) No previous mention';
+    const notPresentClass = 'btn-outline-primary';
+
+    const notMentionText = 'not Mention';
+    const notMentionButtonText = '(w) Not mention';
+    const notMentionClass = 'btn-outline-primary';
+
+    const previousAnswerText = 'Previous Answer';
+    const previousAnswerButtonText = 'Previous Answer';
+    const previousAnswerClass = 'btn-outline-primary';
+
+    const uncertainText = 'Uncertain';
+    const uncertainButtonText = 'Uncertain';
+    const uncertainClass = 'btn-outline-primary';
+
+    const nextAnswerText = 'Add span';
+    const nextAnswerButtonText = '(n) Add span';
+    const nextAnswerClass = 'btn-outline-primary';
+
+    const cancelAnswerText = 'Cancel span';
+    const cancelAnswerButtonText = '(m) Cancel span';
+    const cancelAnswerClass = 'btn-outline-primary';
+
+    const activeQuerySpanClass = 'btn-dark';
+
+    const AnswerSpanStatus = {
+        OK: 'ok',
+        NOT_CANDIDATE: 'not candidate',
+        NOT_PRECEDING: 'not preceding',
+        NOT_SELECTED: 'not selected'
+    };
+
+    function spanEquals(span1, span2) {
+        return (span1.sentenceIndex == span2.sentenceIndex &&
+            span1.startToken == span2.startToken &&
+            span1.endToken == span2.endToken);
+    }
+
+    function spanContains(span1, span2) {
+        return (span1.sentenceIndex === span2.sentenceIndex &&
+            span1.startToken <= span2.startToken &&
+            span1.endToken >= span2.endToken);
+    }
+
+    function spanContainsToken(span, si, ti) {
+        return spanContains(span, {sentenceIndex: si, startToken: ti, endToken: ti + 1});
+    }
+
+    function spanPrecedes(span1, span2) {
+        return (span1.sentenceIndex < span2.sentenceIndex ||
+            (
+                span1.sentenceIndex === span2.sentenceIndex &&
+                span1.endToken <= span2.startToken
+            ));
+    }
+
+    function spanOverlaps(span1, span2) {
+        return (spanContainsToken(span1, span2.sentenceIndex, span2.startToken) ||
+            spanContainsToken(span2, span1.sentenceIndex, span1.startToken));
+    }
+
+    function spanStartEquals(span1, span2) {
+        return (span1.sentenceIndex === span2.sentenceIndex &&
+            span1.startToken === span2.startToken);
+    }
+
+    function spanEndEquals(span1, span2) {
+        return (span1.sentenceIndex === span2.sentenceIndex &&
+            span1.endToken === span2.endToken);
+    }
+
+    function isOverflown(element) {
+        return element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
+    }
+
+    $(document).ready(function() {
+        var data = ${json_data};
+
+        var dataModel = new DataModel(data);
+        var appView = new AppView({model: dataModel});
+        appView.render();
+        $(document).on('keydown', function(e) {return appView.onKey(e)});
+        $('#mturk_form').on('submit', function(e) {return appView.onSubmit(e)});
+    });
+
+</script>
+
+<input id="answer_spans" name="answer_spans" type="hidden"></input>
+
+<div id="content" class="container p-4">
+    <div class="text-center">
+        <button id="toggle_instructions" class="btn btn-lg btn-info" type="button" data-bs-toggle="collapse" data-bs-target="#instructions" aria-expanded="false" aria-controls="instructions">Instructions</button>
+    </div>
+
+    <div id="instructions" class="ps-5 pe-5 pt-3 pb-3 collapse">
+        <p>
+            This task aids the development of computer systems that understand the English language. Thank you for your help!
+        </p>
+
+        <p>
+            You will be shown the transcript of a scene from a TV show.
+            For each sentence, we have highlighted potential mentions (a word or phrase) of an <em>entity</em> (a person, place, or thing).
+            This <em>entity mention</em> may be a pronoun (such as "she" or "their") or something else.
+            We need your help to find an earlier mention of the same entity, whether in the same sentence or in an earlier sentence.
+            You may select a mention by clicking and dragging your mouse pointer over the words making up the mention.
+        </p>
+
+        <p>
+            When selecting the previous mention of the entity, please follow these rules:
+        </p>
+
+        <div class="card card-body">
+            <h5 class="card-title">Select a mention of the same entity.</h5>
+            <p>For example:</p>
+            <p class="example_sentence">
+                Joan usually comes to work early . <span class="btn token btn-danger font-weight-bold">She</span> likes to get a head start on the day .
+            </p>
+            <p>
+                The highlighted entity mention in the last sentence is "She."  There are two entity mentions in the preceding sentence, "Joan" and "work."  We would ask you to select "Joan," because it refers to the same entity (the person named Joan) as "She" does:
+            </p>
+            <p class="example_sentence">
+                <span class="btn token btn-dark">Joan</span> usually comes to work early . <span class="btn token btn-success font-weight-bold">She</span> likes to get a head start on the day .
+            </p>
+        </div>
+
+        <div class="card card-body">
+            <h5 class="card-title">Select all words in a mention.</h5>
+            <p>For example:</p>
+            <p class="example_sentence">
+                The office manager usually comes to work early .  <span class="btn token btn-danger font-weight-bold">She</span> likes to get a head start on the day .
+            </p>
+            <p>
+                We would ask you to select the full mention "The office manager" by clicking and dragging over all three words, as opposed to selecting just "office manager" or "manager:"
+            </p>
+            <p class="example_sentence">
+                <span class="btn token btn-dark">The</span> <span class="btn token btn-dark">office</span> <span class="btn token btn-dark">manager</span> usually comes to work early .  <span class="btn token btn-success font-weight-bold">She</span> likes to get a head start on the day .
+            </p>
+        </div>
+
+        <div class="card card-body">
+            <h5 class="card-title">Include possessive words as entity mentions.</h5>
+            <p>For example:</p>
+            <p class="example_sentence">
+                The office manager does n't find her job challenging enough .  <span class="btn token btn-danger font-weight-bold">She</span> comes to work early in hopes of getting promoted .
+            </p>
+            <p>
+                While the entity mentions in the first sentence may appear to be "The office manager" and "her job," we also consider the possessive pronoun "her" to be a mention of the person in question.  So, you may instead select "her" as a previous mention:
+            </p>
+            <p class="example_sentence">
+                The office manager does n't find <span class="btn token btn-dark">her</span> job challenging enough .  <span class="btn token btn-success font-weight-bold">She</span> comes to work early in hopes of getting promoted .
+            </p>
+        </div>
+
+        <div class="card card-body">
+            <h5 class="card-title">If there is no previous mention of the entity, select <span class="btn btn-outline-primary p-1">no previous mention</span>.</h5>
+            <p>For example:</p>
+            <p class="example_sentence">
+                <span class="btn btn-outline-primary p-1">Leonard</span>:Hi, I am Leonard. This is Sheldon.
+            </p>
+            <p class="example_sentence">
+                <span class="btn btn-outline-primary p-1">Sheldon</span>: Hello.
+            </p>
+            <p class="example_sentence">
+                <span class="btn btn-outline-primary p-1">Leonard</span>: We are here to pick up <span class="btn token btn-danger font-weight-bold">Penny's</span>  <span class="btn token btn-danger font-weight-bold">TV</span>.
+            </p>
+            <p>
+                We would ask you to click <span class="btn btn-outline-primary p-1">No previous mention</span> as there is no previous mention of Penny's TV.
+            </p>
+            
+        </div>
+
+        <div class="card card-body">
+            <h5 class="card-title">If the selected span does not refer to an entity (a person, place, or thing), please select <span class="btn btn-outline-primary p-1">Not mention</span>.</h5>
+            <p>For example:</p>
+            <p class="example_sentence">
+                <span class="btn btn-outline-primary p-1">Leonard</span>:Hi, I am Leonard. This is Sheldon.
+            </p>
+            <p class="example_sentence">
+                <span class="btn btn-outline-primary p-1">Sheldon</span>: Hello.
+            </p>
+            <p class="example_sentence">
+                <span class="btn btn-outline-primary p-1">Leonard</span>: We are here to <span class="btn token btn-danger font-weight-bold">pick</span> <span class="btn token btn-danger font-weight-bold">up</span> Penny's TV.
+            </p>
+            <p>
+                We would ask you to click <span class="btn btn-outline-primary p-1">not mention</span> since the selected span does not refer to an entity.
+            </p>
+        </div>
+
+        <div class="card card-body">
+            <h5 class="card-title">If the selected mention is a plural (refer to multiple <em>different</em> entities), please select different mentions.</h5>
+            <p>For example:</p>
+            <p class="example_sentence">
+                <span class="btn btn-outline-primary p-1">Leonard</span>:Hi, I am Leonard. This is Sheldon.
+            </p>
+            <p class="example_sentence">
+                <span class="btn btn-outline-primary p-1">Sheldon</span>: Hello.
+            </p>
+            <p class="example_sentence">
+                <span class="btn btn-outline-primary p-1">Leonard</span>: <span class="btn token btn-danger font-weight-bold">We</span> are here to pick up Penny's TV.
+            </p>
+
+            <p>
+                The highlighted entity mention in the last sentence is a plural mention "We". We would ask you to select mention of each <em>different</em> entity it corefer to.
+            </p>
+
+            <p class="example_sentence">
+                <span class="btn btn-outline-primary p-1">Leonard</span>:Hi, I am Leonard. This is Sheldon.
+            </p>
+            <p class="example_sentence">
+                <span class="btn token btn-dark">Sheldon</span>: Hello.
+            </p>
+            <p class="example_sentence">
+                <span class="btn token btn-dark">Leonard</span>: <span class="btn token btn-success font-weight-bold">We</span> are here to pick up Penny's TV.
+            </p>
+        </div>
+
+        <p class="pt-3">
+            In these simplified examples, we have highlighted one entity mention at a time and asked for previous mention of that entity.  In general, we will select multiple entity mentions across the document (called <em>query mentions</em>) and ask for a preceding mention for each one.  We will display the list of query mentions above the text; the active query mention will be highlighted in the text and bolded in the list above.  Dragging over text will select the immediately previous mention for the active query mention only; a different query mention may be activated by clicking on it in the list of query mentions, by using the provided "next query" and "previous query" buttons, or by pressing "Tab" or "Shift" + "Tab" on your keyboard.
+        </p>
+
+        <p>
+            Additionally, we suggest entity mention selections. You click and drag to select an entity mention in the text, these mentions (called <em>candidate mentions</em>) that overlap your selection will be listed in a panel to the right, above the "no previous mention" button.  Click on a candidate mention to change your selection.
+        </p>
+
+        <p>Example:</p>
+
+        <div class="card card-body">
+            <div class="clearfix">
+                <div class="float-start w-75 border-start border-end p-3">
+                    <h5>Text</h5>
+                    <div>
+                        <div class="mb-3">
+                            <span class="btn token">I</span><span class="whitespace"> </span><span class="btn token">went</span><span class="whitespace"> </span><span class="btn token">to</span><span class="whitespace"> </span><span class="btn token">a</span><span class="whitespace"> </span><span class="btn token">party</span><span class="whitespace"> </span><span class="btn token">at</span><span class="whitespace"> </span><span class="btn token">the</span><span class="whitespace"> </span><span class="btn token">bar</span><span class="whitespace"> </span><span class="btn token">.</span><span class="whitespace"> </span><span class="btn token">There</span><span class="whitespace"> </span><span class="btn token">was</span><span class="whitespace"> </span><span class="btn token">a</span><span class="whitespace"> </span><span class="btn token">plate</span><span class="whitespace"> </span><span class="btn token">of</span><span class="whitespace"> </span><span class="btn token btn-dark disabled">soft</span><span class="whitespace"> </span><span class="btn token">cheeses</span><span class="whitespace"> </span><span class="btn token">there</span><span class="whitespace"> </span><span class="btn token">.</span><span class="whitespace"> </span><span class="btn token">I</span><span class="whitespace"> </span><span class="btn token">did</span><span class="whitespace"> </span><span class="btn token">n't</span><span class="whitespace"> </span><span class="btn token">realize</span><span class="whitespace"> </span><span class="btn token">the</span><span class="whitespace"> </span><span class="btn token">bar</span><span class="whitespace"> </span><span class="btn token">would</span><span class="whitespace"> </span><span class="btn token">have</span><span class="whitespace"> </span><span class="btn token">such</span><span class="whitespace"> </span><span class="btn token btn-danger font-weight-bold">ritzy</span><span class="whitespace"> </span><span class="btn token btn-danger font-weight-bold">snacks</span><span class="whitespace"> </span><span class="btn token">.</span><span class="whitespace"> </span>
+                        </div>
+                        <div class="clearfix">
+                            <div class="mb-2 float-start">
+                                <i class="me-2 mt-1">Active query:</i>
+                                <div class="btn me-4 mt-1 font-weight-bold btn-danger p-1">ritzy snacks </div>
+                                <i class="me-2 mt-1">Answer:</i>
+                                <div class="btn me-4 mt-1 btn-dark disabled p-1">soft  (invalid)</div>
+                            </div>
+                        </div>
+                        <div class="clearfix">
+                            <div class="float-start">
+                                <i class="me-2 mt-1">Queries:</i>
+                                <div class="btn me-2 mt-1 btn-outline-success">I </div>
+                                <div class="btn me-2 mt-1 btn-outline-success">the bar </div>
+                                <div class="btn me-2 mt-1 font-weight-bold btn-danger">ritzy snacks </div>
+                            </div>
+                            <div class="float-end">
+                                <button class="btn btn-outline-primary ms-1 mt-1 wrap_btn" aria-label="Previous query">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </button>
+                                <button class="btn btn-outline-primary ms-1 mt-1 wrap_btn" aria-label="Next query">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="float-end w-25 border-end">
+                    <div class="p-3">
+                        <h5>Overlapping Candidates</h5>
+                        <div class="btn-group-vertical"><button class="btn text-start btn-outline-dark" type="button">(1) a plate of soft cheeses </button><button class="btn text-start btn-outline-dark" type="button">(2) plate of soft cheeses </button><button class="btn text-start btn-outline-dark" type="button">(3) soft cheeses </button><button class="btn text-start answer_not_present_button btn-outline-primary" type="button">(n)o previous mention</button></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <p>
+            In this example, candidate mentions (or "no previous mention") have been selected for the first two query mentions.  The third query mention, "ritzy snacks," is active; you may wish to select "soft cheeses" as the immediately previous mention.  You could do so by clicking "(3) soft cheeses" in the right panel, pressing "3" on your keyboard, or clicking and dragging your mouse over "soft cheeses" in the text.
+        </p>
+
+        <p>At any time, you may press "?" on your keyboard to see a list of keyboard shortcuts.  To hide the keyboard shortcuts box, click outside the box or press "?" again.</p>
+
+        <p>
+            Finally, note that you may be asked for multiple mentions of the same entity and you do not need to pick a different mention each time.
+        </p>
+
+        <p>Example:</p>
+
+        <div class="card card-body">
+            <div class="clearfix">
+                <div class="float-start w-75 border-start border-end p-3">
+                    <h5>Text</h5>
+                    <div>
+                        <div class="mb-3">
+                            <span class="btn token">One</span><span class="whitespace"> </span><span class="btn token">person</span><span class="whitespace"> </span><span class="btn token">usually</span><span class="whitespace"> </span><span class="btn token">comes</span><span class="whitespace"> </span><span class="btn token">to</span><span class="whitespace"> </span><span class="btn token">work</span><span class="whitespace"> </span><span class="btn token">early</span><span class="whitespace"> </span><span class="btn token">.</span><span class="whitespace"> </span><span class="btn token btn-dark">Joan</span><span class="whitespace"> </span><span class="btn token">,</span><span class="whitespace"> </span><span class="btn token">the</span><span class="whitespace"> </span><span class="btn token">office</span><span class="whitespace"> </span><span class="btn token">manager</span><span class="whitespace"> </span><span class="btn token">,</span><span class="whitespace"> </span><span class="btn token">wants</span><span class="whitespace"> </span><span class="btn token">a</span><span class="whitespace"> </span><span class="btn token">promotion</span><span class="whitespace"> </span><span class="btn token">,</span><span class="whitespace"> </span><span class="btn token">so</span><span class="whitespace"> </span><span class="btn token btn-success font-weight-bold">she</span><span class="whitespace"> </span><span class="btn token">likes</span><span class="whitespace"> </span><span class="btn token">to</span><span class="whitespace"> </span><span class="btn token">get</span><span class="whitespace"> </span><span class="btn token">a</span><span class="whitespace"> </span><span class="btn token">head</span><span class="whitespace"> </span><span class="btn token">start</span><span class="whitespace"> </span><span class="btn token">on</span><span class="whitespace"> </span><span class="btn token">the</span><span class="whitespace"> </span><span class="btn token">day</span><span class="whitespace"> </span><span class="btn token">.</span><span class="whitespace"> </span>
+                        </div>
+                        <div class="clearfix">
+                            <div class="mb-2 float-start">
+                                <i class="me-2 mt-1">Active query:</i>
+                                <div class="btn me-4 mt-1 font-weight-bold btn-success p-1">she </div>
+                                <i class="me-2 mt-1">Answer:</i>
+                                <div class="btn me-4 mt-1 btn-dark p-1">Joan </div>
+                            </div>
+                        </div>
+                        <div class="clearfix">
+                            <div class="float-start">
+                                <i class="me-2 mt-1">Queries:</i>
+                                <div class="btn me-2 mt-1 btn-outline-success">Joan </div>
+                                <div class="btn me-2 mt-1 btn-outline-success">the office manager </div>
+                                <div class="btn me-2 mt-1 btn-outline-success">a promotion </div>
+                                <div class="btn me-2 mt-1 font-weight-bold btn-success">she </div>
+                                <div class="btn me-2 mt-1 btn-outline-danger">the day </div>
+                            </div>
+                            <div class="float-end">
+                                <button class="btn btn-outline-primary ms-1 mt-1 wrap_btn" aria-label="Previous query">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </button>
+                                <button class="btn btn-outline-primary ms-1 mt-1 wrap_btn" aria-label="Next query">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="float-end w-25 border-end">
+                    <div class="p-3">
+                        <h5>Overlapping Candidates</h5>
+                        <div class="btn-group-vertical"><button class="btn text-start btn-dark" type="button">(1) Joan </button><button class="btn text-start answer_not_present_button btn-outline-primary" type="button">(n)o previous mention</button></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <p>
+            In this example, valid candidate mentions (or "no previous mention") have been selected for "Joan," "the office manager," and "a promotion."  Additionally, "Joan" has been selected as the previous candidate mention for "she," the active query mention.  A valid candidate mention has not been selected for "the day;" we'd expect you to switch the active query mention to "the day" (by clicking "the day" in the query list, clicking the "next query" button, or pressing "Tab" on your keyboard) and then select "(n)o previous mention" in the right panel (or press "n" on your keyboard). Note that "Joan" was also picked as the previous candidate mention for "the office manager," and this repetition is okay since it is correct.
+        </p>
+
+        <p>
+            In all of the examples, note that punctuation marks have been separated from other words and contractions have been split up.  This formatting is intentional; please let us know if you have problems understanding or annotating the resulting text.
+        </p>
+
+        <p>
+            Please do your best to resolve each entity mention; we will periodically check solutions to ensure their quality, but it is natural for people to disagree sometimes on complex problems like these.  Thank you again for your help!  If you have any questions, please let us know at <a href="mailto:textual.choreography@gmail.com">textual.choreography@gmail.com</a>
+        </p>
+
+        <p><em>(End of instructions)</em></p>
+    </div><!-- /.instructions -->
+
+    <div class="row pt-3 pb-3">
+        <div class="col-9">
+            <div id="sentence_list"></div>
+        </div>
+
+        <div class="col-3">
+            <div class=" border p-3 sticky-top">
+                <div id="candidate_list" class="btn-group-vertical"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="alerts"></div>
+
+    <div class="modal fade" id="keyboard_shortcuts" tabindex="-1" role="dialog" aria-labelledby="keyboard_shortcuts_title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="keyboard_shortcuts_title">Keyboard Shortcuts</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table">
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">1</span>, <span class="btn btn-light p-1 border">2</span>, ..., <span class="btn btn-light p-1 border">9</span></td>
+                            <td>Select overlapping candidate from list</td>
+                        </tr>
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">q</span></td>
+                            <td>Select "no previous mention"</td>
+                        </tr>
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">w</span></td>
+                            <td>Select "not mention"</td>
+                        </tr>
+
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">n</span></td>
+                            <td>Add Answer for Plural"</td>
+                        </tr>
+
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">m</span></td>
+                            <td>Cancel Current Answer"</td>
+                        </tr>
+
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">Tab</span></td>
+                            <td>Go to next query mention</td>
+                        </tr>
+                        
+                        <tr>
+                            <td><span class="btn btn-light p-1 border me-2">Shift</span><span class="btn btn-light p-1 border">Tab</span></td>
+                            <td>Go to previous query mention</td>
+                        </tr>
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">&rightarrow;</span></td>
+                            <td>Select next word in text</td>
+                        </tr>
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">&leftarrow;</span></td>
+                            <td>Select previous word in text</td>
+                        </tr>
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">i</span></td>
+                            <td>Show/hide instructions</td>
+                        </tr>
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">?</span></td>
+                            <td>Show/hide keyboard shortcuts</td>
+                        </tr>
+
+                        <tr>
+                            <td>Character Short Cut</td>
+                        </tr>
+
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">s</span></td>
+                            <td>Sheldon</td>
+                        </tr>
+
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">l</span></td>
+                            <td>Leonard</td>
+                        </tr>
+
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">p</span></td>
+                            <td>Penny</td>
+                        </tr>
+
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">r</span></td>
+                            <td>Raj</td>
+                        </tr>
+
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">h</span></td>
+                            <td>Howard</td>
+                        </tr>
+
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">a</span></td>
+                            <td>Amy</td>
+                        </tr>
+
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">b</span></td>
+                            <td>Bernadette</td>
+                        </tr>
+
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,732 @@
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"
+      integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO"
+      crossorigin="anonymous">
+
+<script src="https://code.jquery.com/jquery-3.4.1.min.js"
+        integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo="
+        crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"
+        integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy"
+        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.9.1/underscore.js"
+        integrity="sha384-77p0pqpfMaY9Jg4DcGbencxtYzKWg/Z+wIFbgDlPu4bEwb2fsCrK/ph2uUprTGv8"
+        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/backbone.js/1.4.0/backbone.js"
+        integrity="sha384-nhWt56PME93S1JQLa+kxZkVkAPQAVXJ2QFp2upRdyHKS83dOhoiHLwkiWMcLjmPc"
+        crossorigin="anonymous"></script>
+
+<style>
+    /**
+     * Bootstrap button colors:
+     *
+     *     btn-primary:   #007bff
+     *     btn-secondary: #5a6268
+     *     btn-success:   #218838
+     *     btn-info:      #16a2b8
+     *     btn-warning:   #f0ad4e
+     *     btn-danger:    #dc3545
+     *     btn-dark:      #23272b
+     *
+     * We use this tool to generate the skeleton for striped buttons:
+     *
+     *     http://stripesgenerator.com
+     */
+
+    .btn-success.btn-dark {
+        background-image: linear-gradient(45deg, #218838 25%, #23272b 25%, #23272b 50%, #218838 50%, #218838 75%, #23272b 75%, #23272b 100%);
+        background-size: 28.28px 28.28px;
+    }
+    .btn-outline-success:hover {
+        color: #218838;
+        border-color: #218838;
+        background-color: transparent;
+        background-image: none;
+    }
+    .btn-outline-success.btn-dark {
+        background-image: linear-gradient(#218838, #23272b, #218838);
+        color: #fff;
+        border-color: #218838;
+        border-left-width: 2px;
+        border-right-width: 2px;
+    }
+
+    .btn-danger.btn-dark {
+        background-image: linear-gradient(45deg, #dc3545 25%, #23272b 25%, #23272b 50%, #dc3545 50%, #dc3545 75%, #23272b 75%, #23272b 100%);
+        background-size: 28.28px 28.28px;
+    }
+    .btn-outline-danger:hover {
+        color: #dc3545;
+        border-color: #dc3545;
+        background-color: transparent;
+        background-image: none;
+    }
+    .btn-outline-danger.btn-dark {
+        background-image: linear-gradient(#dc3545, #23272b, #dc3545);
+        color: #fff;
+        border-color: #dc3545;
+        border-left-width: 2px;
+        border-right-width: 2px;
+    }
+
+    .token {
+        padding: 0.1rem;
+    }
+
+    .example_sentence {
+        text-indent: 2em;
+    }
+    .example_sentence span {
+        text-indent: 0;
+    }
+
+    .wrap_btn {
+        white-space: normal;
+    }
+</style>
+
+<script>
+    /* globals Backbone, _ */
+
+
+    /**
+
+     The DataModel object should be initialized with a JSON object with the
+     format:
+
+     {
+       "sentences": [
+         ["john", "crashed", "his", "car", "."],
+         ["the", "crash", "occurred", "in", "catonsville", "."],
+       ],
+       "querySpan": {
+         "sentenceIndex": 1,
+         "startToken": 0,
+         "endToken": 2
+       },
+       "candidateSpans": [
+         {
+           "sentenceIndex": 0,
+           "startToken": 0,
+           "endToken": 1
+         },
+         {
+           "sentenceIndex": 0,
+           "startToken": 1,
+           "endToken": 4
+         },
+         {
+           "sentenceIndex": 0,
+           "startToken": 3,
+           "endToken": 4
+         },
+         {
+           "sentenceIndex": 1,
+           "startToken": 0,
+           "endToken": 2
+         },
+         {
+           "sentenceIndex": 1,
+           "startToken": 4,
+           "endToken": 5
+         },
+       ]
+     }
+
+     */
+    var DataModel = Backbone.Model.extend({
+        defaults: {
+            activeAnswerIndex: undefined
+        },
+        initialize: function() {
+            var numSentences = this.attributes.sentences.length;
+            var maxLength = _.max(_.map(this.attributes.sentences, 'length'));
+            this.attributes.candidateSpans = _.sortBy(
+                this.attributes.candidateSpans,
+                function(span) {
+                    return span.notPresent ?
+                        (numSentences * maxLength * maxLength) :
+                        (span.sentenceIndex * maxLength * maxLength +
+                            span.startToken * maxLength +
+                            span.endToken);
+                });
+        },
+        getSpanText: function(span) {
+            if (span.sentenceIndex !== -1) {
+                var s = '';
+                for (var ti = span.startToken; ti < span.endToken; ti++) {
+                    s += this.attributes.sentences[span.sentenceIndex][ti] + ' ';
+                }
+                return s;
+            } else {
+                return '';
+            }
+        },
+        getActiveAnswerSpan: function() {
+            return (this.validateAnswer() && this.attributes.activeAnswerIndex >= 0) ?
+                this.attributes.candidateSpans[this.attributes.activeAnswerIndex] :
+                null;
+        },
+        activeAnswerIsOther: function() {
+            return this.attributes.activeAnswerIndex === -1;
+        },
+        getCandidateSpans: function() {
+            return this.attributes.candidateSpans;
+        },
+        setActiveAnswerIndex: function(activeAnswerIndex) {
+            this.attributes.activeAnswerIndex = activeAnswerIndex;
+        },
+        stepActiveAnswerIndex: function(forward) {
+            if (forward) {
+                this.setActiveAnswerIndex(
+                    this.attributes.activeAnswerIndex === undefined ?
+                        0 :
+                        (this.attributes.activeAnswerIndex === this.attributes.candidateSpans.length - 1 ?
+                            -1 :
+                            this.attributes.activeAnswerIndex + 1));
+            } else {
+                this.setActiveAnswerIndex(
+                    this.attributes.activeAnswerIndex === undefined ?
+                        -1 :
+                        (this.attributes.activeAnswerIndex === -1 ?
+                            this.attributes.candidateSpans.length - 1 :
+                            this.attributes.activeAnswerIndex - 1));
+            }
+        },
+        validateAnswer: function() {
+            return this.attributes.activeAnswerIndex !== undefined &&
+                    this.attributes.activeAnswerIndex >= -1 &&
+                    this.attributes.activeAnswerIndex < this.attributes.candidateSpans.length;
+        }
+    });
+
+    var CandidateListView = Backbone.View.extend({
+        el: '#candidate_list',
+        events: {
+            'click button.clickable': 'onClick'
+        },
+        selectCandidateByKey: function(key) {
+            var keyInt = parseInt(key);
+            if (key === 's') {
+                this.selectCandidate(-1);
+            } else if (! isNaN(keyInt)) {
+                this.selectCandidate(keyInt - 1);
+            }
+        },
+        onClick: function(event) {
+            this.selectCandidate($(event.currentTarget).data('answer_num') - 1);
+        },
+        selectCandidate: function(answerIndex) {
+            if (answerIndex >= -1 && answerIndex < this.model.attributes.candidateSpans.length) {
+                this.model.setActiveAnswerIndex(answerIndex);
+                this.model.trigger('change');
+            }
+        },
+        render: function() {
+            this.$el.empty();
+
+            var activeAnswerIndex = this.model.attributes.activeAnswerIndex;
+
+            var candidateSpans = this.model.getCandidateSpans();
+            if (candidateSpans.length === 0) {
+                this.$el.append($('<div>')
+                    .addClass('alert alert-danger')
+                    .text('Candidate spans not found.'));
+            } else {
+                for (var candidateIndex = 0; candidateIndex < candidateSpans.length; candidateIndex++) {
+                    var candidateSpan = candidateSpans[candidateIndex];
+                    var answerNum = candidateIndex + 1;
+                    this.$el.append($('<button>')
+                        .addClass('btn wrap_btn text-left clickable')
+                        .addClass((candidateIndex === activeAnswerIndex) ?
+                            (candidateSpan.notPresent ? activeNotPresentClass : 'btn-dark') :
+                            (candidateSpan.notPresent ? notPresentClass : 'btn-outline-dark'))
+                        .attr('type', 'button')
+                        .data('answer_num', (answerNum < 10) ? answerNum : -1)
+                        .text(((answerNum < 10) ? '(' + answerNum + ') ' : '') +
+                            (candidateSpan.notPresent ?
+                                notPresentText :
+                                this.model.getSpanText(candidateSpan))));
+                }
+                this.$el.append($('<button>')
+                    .addClass('btn wrap_btn text-left clickable')
+                    .addClass(this.model.activeAnswerIsOther() ?
+                        activeOtherClass :
+                        otherClass)
+                    .attr('type', 'button')
+                    .data('answer_num', 0)
+                    .text(otherButtonText));
+            }
+
+            return this;
+        }
+    });
+
+
+    var SentenceView = Backbone.View.extend({
+        el: '#sentence_list',
+        events: {
+            'click span.clickable': 'onClick'
+        },
+        onClick: function(event) {
+            var candidateIndices = $(event.currentTarget).data('candidate_indices');
+            var activePos = _.indexOf(candidateIndices, this.model.attributes.activeAnswerIndex);
+            if (activePos >= 0) {
+                activePos = (activePos + 1) % candidateIndices.length;
+            } else {
+                activePos = 0;
+            }
+            this.model.setActiveAnswerIndex(candidateIndices[activePos]);
+            this.model.trigger('change');
+        },
+        render: function() {
+            this.$el.empty();
+
+            var sentences = this.model.attributes.sentences;
+            var candidateSpans = this.model.attributes.candidateSpans;
+            var activeAnswerIndex = this.model.attributes.activeAnswerIndex;
+            var activeAnswerIsValid = this.model.validateAnswer();
+            var activeAnswerSpan = this.model.getActiveAnswerSpan();
+            var textDiv = $('<div>').addClass('mb-3');
+            for (var si = 0; si < sentences.length; si++){
+                for (var ti = 0; ti < sentences[si].length; ti++) {
+                    var tokenSpan = $('<span>')
+                        .addClass('btn wrap_btn token ')
+                        .text(sentences[si][ti]);
+
+                    if (spanContainsToken(this.model.attributes.querySpan, si, ti)) {
+                        tokenSpan.addClass(activeAnswerIsValid ?
+                            'btn-success font-weight-bold' :
+                            'btn-danger font-weight-bold');
+                    }
+
+                    var candidateIndices = _.filter(
+                        _.range(candidateSpans.length),
+                        function(candidateIndex) {
+                            var candidateSpan = candidateSpans[candidateIndex];
+                            return (! candidateSpan.notPresent &&
+                                spanContainsToken(candidateSpan, si, ti));
+                        });
+                    if (candidateIndices.length > 0) {
+                        tokenSpan
+                            .addClass('clickable')
+                            .addClass(
+                                    _.contains(candidateIndices, activeAnswerIndex) ?
+                                    activeAnswerSpanClass :
+                                    answerSpanClass)
+                            .data('candidate_indices', candidateIndices);
+                    }
+
+                    textDiv.append(tokenSpan);
+
+                    var whitespaceSpan = $('<span>')
+                        .addClass('whitespace')
+                        .text(' ');
+                    textDiv.append(whitespaceSpan);
+                }
+            }
+            var notPresentPos = _.findIndex(candidateSpans, 'notPresent');
+            if (notPresentPos >= 0) {
+                var notPresentDiv = $('<div>')
+                    .addClass('mt-2')
+                    .append($('<span>')
+                        .addClass('token btn wrap_btn clickable ' +
+                            (notPresentPos === activeAnswerIndex ?
+                                activeAnswerSpanClass :
+                                answerSpanClass))
+                        .data('candidate_indices', [notPresentPos])
+                        .text(notPresentText));
+                textDiv.append(notPresentDiv);
+            }
+            this.$el.append(textDiv);
+
+            var activeQuerySpanText = this.model.getSpanText(this.model.attributes.querySpan);
+            var statusDiv = $('<div>')
+                .addClass('clearfix');
+            statusDiv.append($('<div>')
+                .addClass('mb-2 float-left')
+                .append($('<i>').addClass('mr-2 mt-1').text('Query:'))
+                .append($('<div>')
+                    .addClass('btn wrap_btn p-1 mr-4 mt-1 font-weight-bold' + (activeAnswerIsValid ?
+                        ' btn-success' :
+                        ' btn-danger'))
+                    .text(activeQuerySpanText))
+                .append($('<i>').addClass('mr-2 mt-1').text('Answer:'))
+                .append($('<div>')
+                    .addClass('btn wrap_btn p-1 mr-4 mt-1' + (activeAnswerIsValid ?
+                        (this.model.activeAnswerIsOther() ?
+                            ' btn-primary' :
+                            ' btn-dark') :
+                        ' btn-dark disabled'))
+                    .text(activeAnswerIsValid ?
+                        (this.model.activeAnswerIsOther() ?
+                            otherText :
+                            (activeAnswerSpan.notPresent ?
+                                notPresentText :
+                                this.model.getSpanText(activeAnswerSpan))) :
+                        '(unselected)')));
+            this.$el.append(statusDiv);
+
+            return this;
+        }
+    });
+
+    var AppView = Backbone.View.extend({
+        el: '#content',
+        events: {},
+        initialize: function() {
+            this.candidateListView = new CandidateListView({model: this.model});
+            this.sentenceView = new SentenceView({model: this.model});
+            this.listenTo(this.model, 'change', this.render);
+        },
+        onKey: function(event) {
+            var oe = event.originalEvent;
+            if (! oe.altKey && ! oe.ctrlKey && ! oe.metaKey) {
+                var shift = oe.shiftKey;
+                var key = oe.key;
+                if (key === 'Tab') {
+                    event.preventDefault();
+                    this.model.stepActiveAnswerIndex(!shift);
+                    this.model.trigger('change');
+                } else if (key === '?' || key === 'h') {
+                    event.preventDefault();
+                    $('#keyboard_shortcuts').modal('toggle');
+                } else if (key === 'i') {
+                    event.preventDefault();
+                    $('#instructions').collapse('toggle');
+                } else if ('123456789s'.split('').includes(key)) {
+                    event.preventDefault();
+                    this.candidateListView.selectCandidateByKey(key);
+                }
+            }
+        },
+        onSubmit: function(event) {
+            if (this.model.validateAnswer()) {
+                $("#answer_span").val(JSON.stringify(this.model.getActiveAnswerSpan()));
+                $('#alerts').attr('class', '').text('');
+                return true;
+            } else {
+                this.model.trigger('change');
+                $('#alerts')
+                    .attr('class', 'alert alert-danger')
+                    .text('Please select an answer.');
+                return false;
+            }
+        },
+        render: function() {
+            $('#alerts').removeClass();
+            $('#alerts').empty();
+            this.model.validateAnswer();
+            this.sentenceView.render();
+            this.candidateListView.render();
+        }
+    });
+
+    const otherText = 'something else';
+    const otherButtonText = '(s)omething else';
+    const otherClass = 'btn-outline-primary';
+    const activeOtherClass = 'btn-primary';
+    const notPresentText = '<no previous mention>';
+    const notPresentClass = 'btn-outline-dark';
+    const activeNotPresentClass = 'btn-dark';
+    const answerSpanClass = 'btn-outline-dark';
+    const activeAnswerSpanClass = 'btn-dark';
+
+    function spanContains(span1, span2) {
+        return (span1.sentenceIndex === span2.sentenceIndex &&
+            span1.startToken <= span2.startToken &&
+            span1.endToken >= span2.endToken);
+    }
+
+    function spanContainsToken(span, si, ti) {
+        return spanContains(span, {sentenceIndex: si, startToken: ti, endToken: ti + 1});
+    }
+
+    $(document).ready(function() {
+        var data = ${json_data};
+
+        var dataModel = new DataModel(data);
+        var appView = new AppView({model: dataModel});
+        appView.render();
+        $(document).on('keydown', function(e) {return appView.onKey(e)});
+        $('#mturk_form').on('submit', function(e) {return appView.onSubmit(e)});
+    });
+
+</script>
+
+<input id="answer_span" name="answer_span" type="hidden"></input>
+
+<div id="content" class="container p-4">
+    <div class="text-center">
+        <button id="toggle_instructions" class="btn wrap_btn btn-lg btn-info" type="button" data-toggle="collapse" data-target="#instructions" aria-expanded="false" aria-controls="instructions">Instructions</button>
+    </div>
+
+    <div id="instructions" class="pl-5 pr-5 pt-3 pb-3 collapse">
+        <p>
+            This task aids the development of computer systems that understand the English language. Thank you for your help!
+        </p>
+
+        <p>
+            You will be shown several sentences from a document.
+            In the last sentence, we have highlighted a mention (a word or phrase) of an <em>entity</em> (a person, place, or thing).
+            This <em>entity mention</em> may be a pronoun (such as "she" or "their") or something else.
+            To distinguish this entity mention from other entity mentions, we call it the <em>query mention.</em>
+            We need your help to find the immediately previous (most closely preceding) mention of the same entity as the query mention, whether in the same sentence or in an earlier sentence.
+            We will ask you to select a mention from a small number of preselected mentions (which we call <em>candidate mentions</em>), or indicate that the previous mention is not among the candidate mentions.
+            You may select a candidate mention by clicking any of the words that make it up.
+        </p>
+
+        <p>
+            When selecting the immediately previous mention corresponding to the query mention, please follow these rules:
+        </p>
+
+        <div class="card card-body">
+            <h5 class="card-title">Select a mention of the same entity.</h5>
+            <p>For example:</p>
+            <p class="example_sentence">
+                <span class="btn wrap_btn token btn-outline-dark">Joan</span> usually comes to <span class="btn wrap_btn token btn-outline-dark">work</span> early . <span class="btn wrap_btn token btn-danger font-weight-bold">She</span> likes to get a head start on the day .
+            </p>
+            <p>
+                The query mention in the last sentence is "She."  There are two candidate mentions in the preceding sentence, "Joan" and "work."  We would ask you to select "Joan," because it refers to the same entity (the person named Joan) as the query mention:
+            </p>
+            <p class="example_sentence">
+                <span class="btn wrap_btn token btn-dark">Joan</span> usually comes to <span class="btn wrap_btn token btn-outline-dark">work</span> early . <span class="btn wrap_btn token btn-success font-weight-bold">She</span> likes to get a head start on the day .
+            </p>
+        </div>
+
+        <div class="card card-body">
+            <h5 class="card-title">Select the immediately previous mention of the entity.</h5>
+            <p>For example:</p>
+            <p class="example_sentence">
+                <span class="btn wrap_btn token btn-outline-dark">Joan</span> usually comes to work early .  <span class="btn wrap_btn token btn-outline-dark">She</span> wants a promotion , so <span class="btn wrap_btn token btn-danger font-weight-bold">she</span> likes to get a head start on the day .
+            </p>
+            <p>
+                There are two candidate mentions of the person named Joan preceding the query mention, one in the first sentence and one in the second; we would ask you to select "She" (capitalized), the most closely preceding mention:
+            </p>
+            <p class="example_sentence">
+                <span class="btn wrap_btn token btn-outline-dark">Joan</span> usually comes to work early .  <span class="btn wrap_btn token btn-dark">She</span> wants a promotion , so <span class="btn wrap_btn token btn-success font-weight-bold">she</span> likes to get a head start on the day .
+            </p>
+        </div>
+
+        <div class="card card-body">
+            <h5 class="card-title">Include possessive words as entity mentions.</h5>
+            <p>For example:</p>
+            <p class="example_sentence">
+                <span class="btn wrap_btn token btn-outline-dark">The office manager</span> does n't find <span class="btn wrap_btn token btn-outline-dark">her</span> job challenging enough .  <span class="btn wrap_btn token btn-danger font-weight-bold">She</span> comes to work early in hopes of getting promoted .
+            </p>
+            <p>
+                Even though "her" specifies the possessor of "job," we also consider "her" its own entity mention, referring to the same entity as "The office manager."  So, we would ask you to select the candidate mention "her" as the immediately previous mention corresponding to the query mention:
+            </p>
+            <p class="example_sentence">
+                <span class="btn wrap_btn token btn-outline-dark">The office manager</span> does n't find <span class="btn wrap_btn token btn-dark">her</span> job challenging enough .  <span class="btn wrap_btn token btn-success font-weight-bold">She</span> comes to work early in hopes of getting promoted .
+            </p>
+        </div>
+
+        <p class="pt-3">
+            In each of these simplified examples, there have been two candidate mentions in the text, they have not overlapped, and the previous mention corresponding to the query mention has been one of the candidates.  In general, there may be two or more candidate mentions, "&lt;no previous mention&gt;" may also be provided as a candidate mention (to indicate that there is no previous mention of the entity referred to by the query mention), and the correct answer may not be provided as a candidate mention (for which we will provide a "something else" button).
+        </p>
+
+        <p>Example:</p>
+
+        <div class="card card-body">
+            <div class="clearfix">
+                <div class="float-left w-75 border-left border-right p-3">
+                    <h5>Text</h5>
+                    <div>
+                        <div class="mb-3">
+                            <span class="btn wrap_btn token">I</span><span class="whitespace"> </span><span class="btn wrap_btn token">went</span><span class="whitespace"> </span><span class="btn wrap_btn token">to</span><span class="whitespace"> </span><span class="btn wrap_btn token">a</span><span class="whitespace"> </span><span class="btn wrap_btn token">party</span><span class="whitespace"> </span><span class="btn wrap_btn token">at</span><span class="whitespace"> </span><span class="btn wrap_btn token">the</span><span class="whitespace"> </span><span class="btn wrap_btn token">bar</span><span class="whitespace"> </span><span class="btn wrap_btn token">.</span><span class="whitespace"> </span><span class="btn wrap_btn token">There</span><span class="whitespace"> </span><span class="btn wrap_btn token">was</span><span class="whitespace"> </span><span class="btn wrap_btn token">a</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-outline-dark">plate</span><span class="whitespace"> </span><span class="btn wrap_btn token">of</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-danger">soft</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-danger">cheeses</span><span class="whitespace"> </span><span class="btn wrap_btn token">there</span><span class="whitespace"> </span><span class="btn wrap_btn token">.</span>
+                            <div><span class="btn wrap_btn token btn-outline-dark">&lt;no previous mention&gt;</span></div>
+                        </div>
+                        <div class="clearfix">
+                            <div class="mb-2 float-left">
+                                <i class="mr-2 mt-1">Query:</i>
+                                <div class="btn wrap_btn mr-4 mt-1 font-weight-bold btn-danger p-1">soft cheeses </div>
+                                <i class="mr-2 mt-1">Answer:</i>
+                                <div class="btn wrap_btn mr-4 mt-1 btn-dark disabled p-1">(unselected)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="float-right w-25 border-right">
+                    <div class="p-3">
+                        <h5>Candidates</h5>
+                        <div class="btn-group-vertical"><button class="btn wrap_btn text-left btn-outline-dark" type="button">(1) plate </button><button class="btn wrap_btn text-left btn-outline-dark" type="button">(2) &lt;no previous mention&gt; </button><button class="btn wrap_btn text-left btn-outline-primary" type="button">(s)omething else</button></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <p>
+            In this example, the query mention is "soft cheeses" and the candidates are "plate" and "&lt;no previous mention&gt;."  Although "plate" is part of the phrase "plate of soft cheeses," it describes a different entity than the query, "soft cheeses."  Specifically, the "plate" and the "soft cheeses" are separate entities on their own, but they are both part of the entity "plate of soft cheeses."  There is no other mention of the cheese, so we would expect you to select "&lt;no previous mention&gt;" as the answer.  You could do this by clicking the corresponding button below the text, clicking the corresponding button under "Candidates," or pressing "2" on your keyboard.
+        </p>
+
+        <p>At any time, you may press "?" or "h" on your keyboard to see a list of keyboard shortcuts.  To hide the keyboard shortcuts box, click outside the box or press "?" or "h" again.</p>
+
+        <p>Now consider a slightly different example:</p>
+
+        <div class="card card-body">
+            <div class="clearfix">
+                <div class="float-left w-75 border-left border-right p-3">
+                    <h5>Text</h5>
+                    <div>
+                        <div class="mb-3">
+                            <span class="btn wrap_btn token">I</span><span class="whitespace"> </span><span class="btn wrap_btn token">went</span><span class="whitespace"> </span><span class="btn wrap_btn token">to</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-outline-dark">a</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-outline-dark">party</span><span class="whitespace"> </span><span class="btn wrap_btn token">at</span><span class="whitespace"> </span><span class="btn wrap_btn token">the</span><span class="whitespace"> </span><span class="btn wrap_btn token">bar</span><span class="whitespace"> </span><span class="btn wrap_btn token">.</span><span class="whitespace"> </span><span class="btn wrap_btn token">There</span><span class="whitespace"> </span><span class="btn wrap_btn token">was</span><span class="whitespace"> </span><span class="btn wrap_btn token">a</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-outline-dark">plate</span><span class="whitespace"> </span><span class="btn wrap_btn token">of</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-danger">soft</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-danger">cheeses</span><span class="whitespace"> </span><span class="btn wrap_btn token">there</span><span class="whitespace"> </span><span class="btn wrap_btn token">.</span>
+                        </div>
+                        <div class="clearfix">
+                            <div class="mb-2 float-left">
+                                <i class="mr-2 mt-1">Query:</i>
+                                <div class="btn wrap_btn mr-4 mt-1 font-weight-bold btn-danger p-1">soft cheeses </div>
+                                <i class="mr-2 mt-1">Answer:</i>
+                                <div class="btn wrap_btn mr-4 mt-1 btn-dark disabled p-1">(unselected)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="float-right w-25 border-right">
+                    <div class="p-3">
+                        <h5>Candidates</h5>
+                        <div class="btn-group-vertical"><button class="btn wrap_btn text-left btn-outline-dark" type="button">(1) a party </button><button class="btn wrap_btn text-left btn-outline-dark" type="button">(2) plate </button><button class="btn wrap_btn text-left btn-outline-primary" type="button">(s)omething else</button></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <p>Here, the candidates are "a party" and "plate," and "&lt;no previous mention&gt;" is no longer a candidate.  The correct answer is still that there is no previous mention of the soft cheeses, however, so we would expect you to select "something else" by clicking the corresponding button under "Candidates" or by pressing the "s" key on your keyboard.</p>
+
+        <p>You may also press Tab or Shift-Tab on your keyboard to cycle between answers in the "Candidates" list.</p>
+
+        <p>The correct answer may also be "something else" when a previous mention is present:</p>
+
+        <div class="card card-body">
+            <div class="clearfix">
+                <div class="float-left w-75 border-left border-right p-3">
+                    <h5>Text</h5>
+                    <div>
+                        <div class="mb-3">
+                            <span class="btn wrap_btn token">I</span><span class="whitespace"> </span><span class="btn wrap_btn token">went</span><span class="whitespace"> </span><span class="btn wrap_btn token">to</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-outline-dark">a</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-outline-dark">party</span><span class="whitespace"> </span><span class="btn wrap_btn token">with</span><span class="whitespace"> </span><span class="btn wrap_btn token">ritzy</span><span class="whitespace"> </span><span class="btn wrap_btn token">snacks</span><span class="whitespace"> </span><span class="btn wrap_btn token">at</span><span class="whitespace"> </span><span class="btn wrap_btn token">the</span><span class="whitespace"> </span><span class="btn wrap_btn token">bar</span><span class="whitespace"> </span><span class="btn wrap_btn token">.</span><span class="whitespace"> </span><span class="btn wrap_btn token">There</span><span class="whitespace"> </span><span class="btn wrap_btn token">was</span><span class="whitespace"> </span><span class="btn wrap_btn token">a</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-outline-dark">plate</span><span class="whitespace"> </span><span class="btn wrap_btn token">of</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-danger">soft</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-danger">cheeses</span><span class="whitespace"> </span><span class="btn wrap_btn token">there</span><span class="whitespace"> </span><span class="btn wrap_btn token">.</span>
+                        </div>
+                        <div class="clearfix">
+                            <div class="mb-2 float-left">
+                                <i class="mr-2 mt-1">Query:</i>
+                                <div class="btn wrap_btn mr-4 mt-1 font-weight-bold btn-danger p-1">soft cheeses </div>
+                                <i class="mr-2 mt-1">Answer:</i>
+                                <div class="btn wrap_btn mr-4 mt-1 btn-dark disabled p-1">(unselected)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="float-right w-25 border-right">
+                    <div class="p-3">
+                        <h5>Candidates</h5>
+                        <div class="btn-group-vertical"><button class="btn wrap_btn text-left btn-outline-dark" type="button">(1) a party </button><button class="btn wrap_btn text-left btn-outline-dark" type="button">(2) plate </button><button class="btn wrap_btn text-left btn-outline-primary" type="button">(s)omething else</button></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <p>
+            Now the text has changed, but the candidates are still "a party" and "plate."  Neither of these entity mentions corresponds to the same entity as the query, but "ritzy snacks" does.  The previous mention would thus be "ritzy snacks," but it's not a candidate mention, so we would again expect you to select "something else."
+        </p>
+
+        <p>Finally, we consider an example in which the candidates overlap:</p>
+
+        <div class="card card-body">
+            <div class="clearfix">
+                <div class="float-left w-75 border-left border-right p-3">
+                    <h5>Text</h5>
+                    <div>
+                        <div class="mb-3">
+                            <span class="btn wrap_btn token">I</span><span class="whitespace"> </span><span class="btn wrap_btn token">went</span><span class="whitespace"> </span><span class="btn wrap_btn token">to</span><span class="whitespace"> </span><span class="btn wrap_btn token">a</span><span class="whitespace"> </span><span class="btn wrap_btn token">party</span><span class="whitespace"> </span><span class="btn wrap_btn token">with</span><span class="whitespace"> </span><span class="btn wrap_btn token">ritzy</span><span class="whitespace"> </span><span class="btn wrap_btn token">snacks</span><span class="whitespace"> </span><span class="btn wrap_btn token">at</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-outline-dark">the</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-outline-dark">bar</span><span class="whitespace"> </span><span class="btn wrap_btn token">.</span><span class="whitespace"> </span><span class="btn wrap_btn token">There</span><span class="whitespace"> </span><span class="btn wrap_btn token">was</span><span class="whitespace"> </span><span class="btn wrap_btn token">a</span><span class="whitespace"> </span><span class="btn wrap_btn token">plate</span><span class="whitespace"> </span><span class="btn wrap_btn token">of</span><span class="whitespace"> </span><span class="btn wrap_btn token">soft</span><span class="whitespace"> </span><span class="btn wrap_btn token">cheeses</span><span class="whitespace"> </span><span class="btn wrap_btn token btn-danger">there</span><span class="whitespace"> </span><span class="btn wrap_btn token">.</span>
+                        </div>
+                        <div class="clearfix">
+                            <div class="mb-2 float-left">
+                                <i class="mr-2 mt-1">Query:</i>
+                                <div class="btn wrap_btn mr-4 mt-1 font-weight-bold btn-danger p-1">there </div>
+                                <i class="mr-2 mt-1">Answer:</i>
+                                <div class="btn wrap_btn mr-4 mt-1 btn-dark disabled p-1">(unselected)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="float-right w-25 border-right">
+                    <div class="p-3">
+                        <h5>Candidates</h5>
+                        <div class="btn-group-vertical"><button class="btn wrap_btn text-left btn-outline-dark" type="button">(1) the bar </button><button class="btn wrap_btn text-left btn-outline-dark" type="button">(2) bar </button><button class="btn wrap_btn text-left btn-outline-primary" type="button">(s)omething else</button></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <p>
+            In this example, the query is "there," and we can see from the "Candidates" list that the candidate mentions overlap: "the bar" and "bar."  In this case, the word "the" specifies which bar is being discussed, so the correct answer is "the bar."  Note, however, that the longer of two overlapping mentions is not necessarily the correct answer in all cases!
+        </p>
+
+        <p>
+            In all of the examples, note that punctuation marks have been separated from other words and contractions have been split up.  This formatting is intentional; please let us know if you have problems understanding or annotating the resulting text.
+        </p>
+
+        <p>
+            Please do your best to resolve each entity mention; we will periodically check solutions to ensure their quality, but it is natural for people to disagree sometimes on complex problems like these.  Thank you again for your help!  If you have any questions, please let us know at <a href="mailto:textual.choreography@gmail.com">textual.choreography@gmail.com</a>
+        </p>
+
+        <p><em>(End of instructions)</em></p>
+    </div><!-- /.instructions -->
+
+    <div class="clearfix pt-3 pb-3">
+        <div class="float-left w-75 border-left border-right p-3">
+            <h4>Text</h4>
+            <div id="sentence_list"></div>
+        </div>
+
+        <div class="float-right w-25 border-right p-3">
+            <h4>Candidates</h4>
+            <div id="candidate_list" class="btn-group-vertical"></div>
+        </div>
+    </div>
+
+    <div id="alerts"></div>
+
+    <div class="modal fade" id="keyboard_shortcuts" tabindex="-1" role="dialog" aria-labelledby="keyboard_shortcuts_title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="keyboard_shortcuts_title">Keyboard Shortcuts</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <table class="table">
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">1</span>, <span class="btn btn-light p-1 border">2</span>, ..., <span class="btn btn-light p-1 border">9</span></td>
+                            <td>Select candidate from list</td>
+                        </tr>
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">s</span></td>
+                            <td>Select "something else"</td>
+                        </tr>
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">Tab</span></td>
+                            <td>Select next answer in list</td>
+                        </tr>
+                        <tr>
+                            <td><span class="btn btn-light p-1 border mr-2">Shift</span><span class="btn btn-light p-1 border">Tab</span></td>
+                            <td>Select previous answer in list</td>
+                        </tr>
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">i</span></td>
+                            <td>Show/hide instructions</td>
+                        </tr>
+                        <tr>
+                            <td><span class="btn btn-light p-1 border">h</span>, <span class="btn btn-light p-1 border">?</span></td>
+                            <td>Show/hide keyboard shortcuts</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

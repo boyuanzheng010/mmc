@@ -1,0 +1,3 @@
+<I> went to <<a <party>> at <the <bar>>> .
+There was <<a <plate>> of <soft <cheeses>>> <there> .
+[<I>] didn't realize [<the <bar>>] would have <such [<ritzy <snacks>>>] .
